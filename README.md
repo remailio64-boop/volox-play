@@ -1,4 +1,4 @@
-# Torneio Completo 2.0 — Etapa 1
+# Volox Play
 
 MVP online em React + TypeScript + Supabase.
 
