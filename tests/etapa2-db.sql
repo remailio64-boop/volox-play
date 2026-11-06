@@ -93,6 +93,48 @@ BEGIN
  PERFORM public.register_drawn_athlete(t,q,'Iara Lima','iara@exemplo.com','11999999993');
  SELECT count(*) INTO n FROM public.registrations WHERE tournament_id=t;
  IF n<>4 THEN RAISE EXCEPTION 'Contagem inesperada: %',n; END IF;
- RAISE NOTICE 'OK: individual, formada, quarteto, duplicidade, lotacao e modo';
+ -- Verificar pagamento, validacao, prazo, categoria fechada e lotacao de quarteto.
+ IF (SELECT payment_status FROM public.registrations WHERE id=x)<>'not_required'
+ THEN RAISE EXCEPTION 'Pagamento gratuito incorreto'; END IF;
+ BEGIN
+  PERFORM public.register_drawn_athlete(t,q,'','invalido','123');
+  RAISE EXCEPTION 'FALHA: dados invalidos aceitos';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM='FALHA: dados invalidos aceitos' THEN RAISE; END IF;
+ END;
+ UPDATE public.tournament_categories SET capacity=3 WHERE id=q;
+ BEGIN
+  PERFORM public.register_drawn_athlete(t,q,'Joao Lima','joao@exemplo.com','11999999992');
+  RAISE EXCEPTION 'FALHA: quarteto com capacidade invalida aceito';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM='FALHA: quarteto com capacidade invalida aceito' THEN RAISE; END IF;
+ END;
+ UPDATE public.tournament_categories SET capacity=4,fee_cents=2500 WHERE id=q;
+ x:=public.register_drawn_athlete(t,q,'Joao Lima','joao@exemplo.com','11999999992');
+ IF (SELECT payment_status FROM public.registrations WHERE id=x)<>'awaiting_provider'
+ THEN RAISE EXCEPTION 'Pagamento pendente incorreto'; END IF;
+ PERFORM public.register_drawn_athlete(t,q,'Katia Lima','katia@exemplo.com','11999999991');
+ PERFORM public.register_drawn_athlete(t,q,'Lia Lima','lia@exemplo.com','11999999990');
+ BEGIN
+  PERFORM public.register_drawn_athlete(t,q,'Mara Lima','mara@exemplo.com','11999999989');
+  RAISE EXCEPTION 'FALHA: quarteto lotado aceitou atleta';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM='FALHA: quarteto lotado aceitou atleta' THEN RAISE; END IF;
+ END;
+ UPDATE public.tournament_categories SET status='closed' WHERE id=f;
+ BEGIN
+  PERFORM public.register_team_by_category(t,f,'Dupla C','Nina Lima','nina@exemplo.com','11999999988',ARRAY['Nina Lima','Olga Lima']);
+  RAISE EXCEPTION 'FALHA: categoria fechada aceitou inscricao';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM='FALHA: categoria fechada aceitou inscricao' THEN RAISE; END IF;
+ END;
+ UPDATE public.tournaments SET registration_deadline=current_date-1 WHERE id=t;
+ BEGIN
+  PERFORM public.register_drawn_athlete(t,d,'Paula Lima','paula@exemplo.com','11999999987');
+  RAISE EXCEPTION 'FALHA: inscricao fora do prazo aceita';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM='FALHA: inscricao fora do prazo aceita' THEN RAISE; END IF;
+ END;
+ RAISE NOTICE 'OK: individual, dupla, quarteto, duplicidade, lotacao, prazo, status, dados e pagamento';
 END $test$;
 ROLLBACK;
