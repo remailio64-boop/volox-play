@@ -7,6 +7,8 @@ import { isBeachTennis, validSetScore, formatLabel, scoringDescription } from ".
 import { rankGroup } from "./lib/ranking";
 import { CompetitionRules, PublicHome, RulesPage, RulesEditor, PageMetadata, AppScaffold, MyRegistrations } from "./PublicPages";
 import { modalities, teamSizes, type Modality, type Registration, type Tournament } from "./types";
+import { authMessage } from "./lib/authMessages";
+import { TournamentPublication } from "./TournamentPublication";
 import type { Session } from "@supabase/supabase-js";
 
 const message = (e:unknown) => e instanceof Error ? e.message : "Ocorreu um erro";
@@ -30,13 +32,22 @@ function Login(){
     if(error)throw error;
     setInfo("Se houver uma conta com esse e-mail, você receberá um link para criar uma nova senha. Confira também a pasta de spam.");
    }else{
-    const {error}=mode==="signup"?await supabase.auth.signUp({email:email.trim(),password}):await supabase.auth.signInWithPassword({email:email.trim(),password});
+    const {error}=mode==="signup"?await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:`${window.location.origin}/login`}}):await supabase.auth.signInWithPassword({email:email.trim(),password});
     if(error)throw error;
-    if(mode==="signup")setInfo("Conta criada. Se a confirmação por email estiver habilitada, verifique sua caixa de entrada.");
+    if(mode==="signup")setInfo("Solicitação de cadastro enviada. Se for necessária a confirmação do e-mail, confira sua caixa de entrada e a pasta de spam antes de entrar.");
    }
-  }catch(e){setInfo(message(e))}finally{setBusy(false)}
+  }catch(e){setInfo(authMessage(e))}finally{setBusy(false)}
  }
- return <main className="narrow"><h1>{mode==="login"?"Acesso do organizador":mode==="signup"?"Criar conta":"Recuperar senha"}</h1><form onSubmit={submit} className="card"><label>E-mail<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>{mode!=="reset"&&<label>Senha<input type="password" autoComplete={mode==="signup"?"new-password":"current-password"} minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy}>{busy?"Aguarde...":mode==="login"?"Entrar":mode==="signup"?"Criar conta":"Enviar link de recuperação"}</button>{info&&<p role="status">{info}</p>}</form>{mode==="login"&&<button className="linklike" disabled={busy} onClick={()=>changeMode("reset")}>Esqueci minha senha</button>}<button className="linklike" disabled={busy} onClick={()=>changeMode(mode==="login"?"signup":"login")}>{mode==="login"?"Ainda não tenho conta":"Voltar para entrar"}</button></main>
+ async function resendConfirmation(){
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())){setInfo("Informe um e-mail válido no campo acima.");return}
+  setBusy(true);setInfo("");
+  try{
+   const {error}=await supabase.auth.resend({type:"signup",email:email.trim(),options:{emailRedirectTo:`${window.location.origin}/login`}});
+   if(error)throw error;
+   setInfo("Se houver um cadastro aguardando confirmação, um novo e-mail será enviado. Confira também a pasta de spam.");
+  }catch(e){setInfo(authMessage(e))}finally{setBusy(false)}
+ }
+ return <main className="narrow"><h1>{mode==="login"?"Acesso do organizador":mode==="signup"?"Criar conta":"Recuperar senha"}</h1><form onSubmit={submit} className="card"><label>E-mail<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>{mode!=="reset"&&<label>Senha<input type="password" autoComplete={mode==="signup"?"new-password":"current-password"} minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy}>{busy?"Aguarde...":mode==="login"?"Entrar":mode==="signup"?"Criar conta":"Enviar link de recuperação"}</button>{info&&<p role="status">{info}</p>}</form>{mode==="login"&&<button className="linklike" disabled={busy} onClick={()=>changeMode("reset")}>Esqueci minha senha</button>}{mode!=="reset"&&<button type="button" className="linklike" disabled={busy} onClick={()=>void resendConfirmation()}>Reenviar confirmação de e-mail</button>}<button className="linklike" disabled={busy} onClick={()=>changeMode(mode==="login"?"signup":"login")}>{mode==="login"?"Ainda não tenho conta":"Voltar para entrar"}</button></main>
 }
 function ResetPassword({session,onDone}:{session:Session|null;onDone:()=>void}){
  const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
@@ -170,7 +181,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       !Number.isInteger(capacity)||capacity<2||capacity>512)throw Error("Confira os dados das categorias.");
     return {name:c.name.trim(),modality:c.modality,fee_cents,capacity};
    });
-   if(!name.trim()||!categories.length)throw Error("Informe o campeonato e pelo menos uma categoria.");
+   if(name.trim().length<3||!categories.length)throw Error("Informe o campeonato e pelo menos uma categoria.");
    const {data,error}=await supabase.functions.invoke("criar-pagamento-pix",
     {body:{name:name.trim(),categories}});
    if(error)throw error;
@@ -179,11 +190,23 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
    setPix(data);
   }catch(e){setError(message(e))}finally{setBusy(false)}
  }
+ async function confirmPayment(r:Registration){
+  if(!window.confirm(`Você conferiu o recebimento integral da inscrição de ${r.team_name} na conta da organização? Confirme somente após verificar o crédito. Esta ação registra sua conferência manual e não movimenta dinheiro.`))return;
+  setBusy(true);setError("");
+  try{
+   const {data,error}=await supabase.from("registrations").update({payment_status:"paid"}).eq("id",r.id).eq("tournament_id",selected!).select("*").single();
+   if(error||!data)throw error||new Error("Não foi possível confirmar o recebimento.");
+   setRegs(prev=>prev.map(x=>x.id===r.id?data as Registration:x));
+  }catch(e){setError(message(e))}finally{setBusy(false)}
+ }
  async function decide(r:Registration,status:"approved"|"rejected"){
   setError("");
-  const {error}=await supabase.from("registrations").update({status}).eq("id",r.id);
-  if(error)setError(error.message);
-  else setRegs(prev=>prev.map(x=>x.id===r.id?{...x,status}:x));
+  setBusy(true);
+  try{
+   const {data,error}=await supabase.from("registrations").update({status}).eq("id",r.id).eq("tournament_id",selected!).select("id").single();
+   if(error||!data)throw error||new Error("Não foi possível atualizar a inscrição.");
+   setRegs(prev=>prev.map(x=>x.id===r.id?{...x,status}:x));
+  }catch(e){setError(message(e))}finally{setBusy(false)}
  }
  const active=list.find(t=>t.id===selected);
  return <main>
@@ -192,7 +215,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
    <section>
     <h2>Novo campeonato</h2>
     <form className="card" onSubmit={create}>
-     <label>Nome do campeonato<input required maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label>
+     <label>Nome do campeonato<input required minLength={3} maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label>
      <p className="muted">R$ 29,90 uma única vez pelo campeonato. Categorias ilimitadas.</p>
      {cats.map((c,i)=><div className="card" key={i}>
       <h3>Categoria {i+1}</h3>
@@ -224,8 +247,9 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     {list.map(t=><div className="card" key={t.id}>
      <h3>{t.name}</h3>
      <p>{modalities[t.modality]} • {t.category} • {money(t.fee_cents)}</p>
-     <p><Link to={`/t/${t.slug}`}>Página pública</Link></p>
-     <button className="secondary" onClick={()=>setSelected(t.id)}>Inscrições e regulamento</button>
+     <TournamentPublication tournament={t} onChanged={()=>void load()}/>
+     {t.status==="open"?<p><Link to={`/t/${t.slug}`}>Página pública</Link></p>:<p className="muted">Publique o torneio para liberar o link aos atletas.</p>}
+     <button className="secondary" onClick={()=>{setSelected(t.id);void carregarCategorias(t.id)}}>Inscrições e regulamento</button>
 <button
   className="secondary"
  onClick={() => {
@@ -241,7 +265,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   {error&&<p className="error" role="alert">{error}</p>}
   {active&&<section>
    <h2>Inscrições — {active.name}</h2>
-   <RulesEditor tournament={active} organizerId={userId} onSaved={()=>void load()}/>
+   <RulesEditor key={active.id} tournament={active} organizerId={userId} onSaved={()=>void load()}/>
 {drawLoading && <p>Carregando categorias...</p>}
 {!drawLoading && drawCategories.length === 0 && <p className="muted">Clique em Sortear Chaves para carregar as categorias.</p>}
 {drawCategories.length > 0 && (
@@ -297,18 +321,18 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
    {drawCategoryId && <JogosPanel categoryId={drawCategoryId}/>}
    {drawCategoryId && <EliminatoriasPanel categoryId={drawCategoryId}/>}
    {drawCategoryId && <PublicacaoResultados categoryId={drawCategoryId}/>} 
-   <p className="muted">A cobrança das inscrições das equipes ainda não está integrada.</p>
+   <p className="muted">As inscrições pagas são recebidas diretamente pela organização. Confira o recebimento antes de confirmar o pagamento. A confirmação aqui é manual e não consulta o banco.</p>
    {regs.length===0?<p>Nenhuma inscrição ainda.</p>:<div className="table-wrap"><table>
     <thead><tr><th>Equipe</th><th>Responsável</th><th>Atletas</th><th>Pagamento</th><th>Situação</th><th>Ações</th></tr></thead>
     <tbody>{regs.map(r=><tr key={r.id}>
      <td>{r.team_name}</td>
      <td>{r.captain_name}<br/><small>{r.captain_email}</small><br/><small>{r.captain_phone}</small></td>
      <td>{r.athletes.join(", ")}</td>
-     <td>{r.payment_status==="not_required"?"Gratuita":r.payment_status==="paid"?"Pago":"Aguardando PIX"}</td>
-     <td>{r.status}</td>
-     <td><button disabled={r.status==="approved"||(r.payment_status!=="not_required"&&r.payment_status!=="paid")}
+     <td>{r.payment_status==="not_required"?"Gratuita":r.payment_status==="paid"?"Recebimento confirmado":"Aguardando confirmação"}{r.payment_confirmed_at&&<small style={{display:"block"}}>Confirmado manualmente em {new Date(r.payment_confirmed_at).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})}</small>}</td>
+     <td>{r.status==="approved"?"Aprovada":r.status==="rejected"?"Rejeitada":"Aguardando aprovação"}</td>
+     <td>{r.payment_status!=="paid"&&r.payment_status!=="not_required"&&r.status!=="rejected"&&<button disabled={busy} onClick={()=>void confirmPayment(r)}>Confirmar recebimento</button>}<button disabled={busy||r.status==="approved"||(r.payment_status!=="not_required"&&r.payment_status!=="paid")}
       onClick={()=>decide(r,"approved")}>Aprovar</button>
-      <button className="danger" disabled={r.status==="rejected"} onClick={()=>decide(r,"rejected")}>Rejeitar</button></td>
+      <button className="danger" disabled={busy||r.status==="rejected"} onClick={()=>decide(r,"rejected")}>Rejeitar</button></td>
     </tr>)}</tbody></table></div>}
   </section>}
  </main>;
@@ -369,7 +393,7 @@ function JogosPanel({categoryId}:{categoryId:string}){
   let a=0,b=0;
   for(let i=0;i<parsed.length;i++){
    const [pa,pb]=parsed[i];
-   const target=i===bestOf-1?15:modality==="quadra_6x6"?25:21;
+   const target=bestOf>1&&i===bestOf-1?15:modality==="quadra_6x6"?25:21;
    if(a===targetWins||b===targetWins){setErr("Há sets após o fim da partida.");return;}
    if(!validSetScore(modality,bestOf,i,pa,pb)){
     setErr(isBeachTennis(modality)?"Placar inválido: informe 6–0 a 6–4, 7–5 ou 7–6.":`Placar inválido no ${i+1}º set. Mínimo ${target} pontos e diferença de 2.`);return;
@@ -489,7 +513,7 @@ function EliminatoriasPanel({categoryId}:{categoryId:string}){
   const parsed=scores.map(row=>row.map(Number));
   let a=0,b=0;
   for(let i=0;i<parsed.length;i++){
-   const [pa,pb]=parsed[i],target=i===bestOf-1?15:modality==="quadra_6x6"?25:21;
+   const [pa,pb]=parsed[i],target=bestOf>1&&i===bestOf-1?15:modality==="quadra_6x6"?25:21;
    if(a===(bestOf+1)/2||b===(bestOf+1)/2||!validSetScore(modality,bestOf,i,pa,pb)){
     setErr(`Placar inválido no set ${i+1}.`);return;
    }
@@ -743,13 +767,13 @@ function PublicTournament(){
   {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição individual, por dupla ou por equipe.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null}]).map(c=>{const available=state.accepting&&c.status==="open";return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {teamSizes[c.modality]} {teamSizes[c.modality]===1?"atleta":"atletas"} por equipe</p><p className="muted">Limite de {c.capacity} equipes · {c.best_of?formatLabel(c.modality,c.best_of):"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por equipe</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?"Inscrever minha equipe":"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
   {tab==="regulamento"&&<div className="card">{cats.length>0&&picker}<CompetitionRules text={t.competition_rules||""} modality={modality} bestOf={selected?.best_of}/></div>}
   {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}<ResultadosPublicos categoryId={catId} modality={modality}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
-  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&<p className="notice">O pagamento da inscrição ainda não está disponível pelo aplicativo. A inscrição ficará aguardando pagamento e não confirma a participação. Consulte a organização antes de prosseguir.</p>}<form onSubmit={submit}><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome do atleta / dupla / equipe<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label><div className="form-section-label">02 · RESPONSÁVEL</div><label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label><div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · ATLETAS TITULARES ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
+  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&t.payment_instructions&&<div className="written-rules"><h3>Pagamento à organização</h3><p>{t.payment_instructions}</p></div>}{fee>0&&<p className="notice">O pagamento é feito diretamente à organização, fora do aplicativo. Sua inscrição ficará aguardando a conferência manual do recebimento e a aprovação da organização. Não há débito automático.</p>}<form onSubmit={submit}><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome do atleta / dupla / equipe<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label><div className="form-section-label">02 · RESPONSÁVEL</div><label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label><div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · ATLETAS TITULARES ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
  </AppScaffold>;
 }
 function RegistrationStatus(){
  const {id}=useParams();const [status,setStatus]=useState("");const [err,setErr]=useState("");
  useEffect(()=>{if(!id)return;supabase.rpc("get_registration_status",{p_id:id}).then(({data,error})=>{if(error)setErr(error.message);else if(!data)setErr("Inscrição não encontrada.");else {setStatus(JSON.stringify(data));rememberRegistration({id,tournament:data.tournament_name||"Campeonato"})}})},[id]);
- let obj:{team_name?:string;status?:string;payment_status?:string;tournament_name?:string}|null=null;try{obj=status?JSON.parse(status):null}catch{}
- return <AppScaffold><div className="registration-status-page"><Link className="event-back" to="/minhas-inscricoes"><ArrowLeft size={17}/> Minhas inscrições</Link><h1>Acompanhar inscrição</h1><div className="card">{err?<p className="error">{err}</p>:obj?<><h2>{obj.team_name}</h2><p>Campeonato: {obj.tournament_name}</p><p>Situação: <strong>{obj.status==="pending"?"Aguardando aprovação":obj.status==="approved"?"Aprovada":"Rejeitada"}</strong></p><p>Pagamento: <strong>{obj.payment_status==="not_required"?"Não exigido":obj.payment_status==="paid"?"Confirmado":"Aguardando integração PIX"}</strong></p><p className="muted">Guarde este link privado. Ele permite consultar o status da sua inscrição.</p></>:<p>Consultando...</p>}</div></div></AppScaffold>
+ let obj:{team_name?:string;status?:string;payment_status?:string;tournament_name?:string;payment_instructions?:string;fee_cents?:number;payment_confirmed_at?:string}|null=null;try{obj=status?JSON.parse(status):null}catch{}
+ return <AppScaffold><div className="registration-status-page"><Link className="event-back" to="/minhas-inscricoes"><ArrowLeft size={17}/> Minhas inscrições</Link><h1>Acompanhar inscrição</h1><div className="card">{err?<p className="error">{err}</p>:obj?<><h2>{obj.team_name}</h2><p>Campeonato: {obj.tournament_name}</p><p>Situação: <strong>{obj.status==="pending"?"Aguardando aprovação":obj.status==="approved"?"Aprovada":"Rejeitada"}</strong></p><p>Pagamento: <strong>{obj.payment_status==="not_required"?"Não exigido":obj.payment_status==="paid"?"Recebimento confirmado pela organização":"Aguardando confirmação da organização"}</strong></p>{obj.payment_status!=="not_required"&&<><p>Valor da inscrição: <strong>{money(obj.fee_cents||0)}</strong></p>{obj.payment_instructions?<div className="written-rules"><h3>Como pagar à organização</h3><p>{obj.payment_instructions}</p></div>:<p>Combine o pagamento diretamente com a organização. O aplicativo não gera cobrança automática da inscrição.</p>}</>}<p className="muted">Guarde este link privado. Ele permite consultar o status da sua inscrição.</p></>:<p>Consultando...</p>}</div></div></AppScaffold>
 }
 export default App;

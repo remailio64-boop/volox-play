@@ -1,40 +1,26 @@
 # VoloxPlay
 
-MVP online em React + TypeScript + Supabase.
+Aplicativo React + TypeScript + Supabase para torneios de vôlei e Beach Tennis.
 
-## Funcionalidades
-- Cadastro/login de organizadores via Supabase Auth.
-- Criação de campeonatos: quadra 6×6, areia 2×2, areia 4×4.
-- Valor por equipe (0 = gratuito), vagas, categoria e aprovação manual.
-- Link público de inscrição, com atletas titulares conforme a modalidade.
-- Painel privado para listar inscrições, aprovar e rejeitar.
-- Link individual de acompanhamento do status.
-- PIX **não implementado**: inscrições pagas ficam em `awaiting_provider` e não podem ser aprovadas até confirmação real.
+## Disponível
 
-## Como rodar
-1. Instale Node.js 20.19+ ou 22+.
-2. Crie um projeto em https://supabase.com e obtenha URL e chave **publishable/anon** (nunca a service_role).
-3. No SQL Editor do Supabase, execute `supabase/migrations/001_initial.sql`.
-4. No painel Authentication > Providers, configure Email. Em ambiente de teste, confirme os emails ou desative temporariamente a exigência de confirmação.
-5. Copie `.env.example` para `.env` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-6. Execute `npm install` e `npm run dev`.
-7. Abra o endereço indicado pelo Vite, crie uma conta, crie campeonato e compartilhe o link público.
-8. Antes de publicar, execute `npm run build`.
+- Acesso de organizadores, recuperação de senha e reenvio de confirmação de e-mail.
+- Criação de campeonatos mediante cobrança de R$ 29,90 ao organizador pelo Mercado Pago. A liberação depende do webhook assinado e do pagamento aprovado pelo provedor.
+- Publicação e ocultação pelo proprietário do torneio, preservando inscrições e resultados. Rascunhos não aparecem no catálogo público e não recebem inscrições.
+- Categorias de quadra 6×6, areia 2×2 e 4×4, Beach Tennis simples e duplas.
+- Inscrição pública, limite de vagas, acompanhamento por link privado e aprovação pelo organizador.
+- Inscrição gratuita ou pagamento direto à organização, com orientações públicas configuráveis. A conferência do recebimento é **manual**, com autor e horário registrados no servidor. O aplicativo não consulta a conta bancária e não processa automaticamente a inscrição do atleta.
+- Chaves, placares, classificação, semifinais, final, terceiro lugar, pódio e publicação dos resultados.
+- Favoritos e histórico de inscrições salvos no navegador. Não são sincronizados entre aparelhos.
 
-## Teste sugerido
-- Crie a Copa Vôlei Assis, areia 4×4, R$120, 16 vagas.
-- Abra o link público em janela anônima e cadastre 4 atletas.
-- Verifique a inscrição no painel e no link de status.
-- **Aprovação ficará bloqueada** enquanto não houver integração PIX real.
-- Crie outro campeonato gratuito (R$0), faça uma inscrição e aprove pelo painel.
-- Confirme que outro organizador não consegue ver/alterar inscrições de terceiros.
+## Desenvolvimento
 
-## Limitações e segurança
-- A RPC `register_team` permite inscrições públicas. Antes de produção, adicionar CAPTCHA/Turnstile, rate limiting e monitoramento anti-spam na borda/servidor.
-- O link individual de status contém um UUID não adivinhável, mas é um segredo de acesso; não o publique.
-- Dados pessoais de atletas: definir política de privacidade, retenção, exclusão, base legal e tratamento de menores conforme LGPD.
-- Sem PIX real, comprovantes, reembolsos, confirmação de pagamentos, reservas temporárias ou integração de conta do organizador.
-- A tabela `organizer_payment_accounts` é apenas preparação. Conexão real precisa de OAuth/onboarding do provedor, backend seguro, webhooks assinados, idempotência e verificação de recebedor.
-- Não inclui ainda grupos, jogos, placares e classificação online: essas funções são da etapa posterior.
-- O cadastro público usa quantidade exata de titulares (2/4/6), sem reservas; regras de equipes e categorias deverão ser refinadas.
-- A RLS protege as inscrições. Revise as políticas com testes de segurança antes de produção.
+Use Node.js 20.19+ ou 22+, instale com `npm ci` e configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` (ou `VITE_SUPABASE_ANON_KEY`). Nunca use uma chave service_role no frontend. O projeto requer o banco existente com suas tabelas, políticas e RPCs; as migrações deste repositório são incrementais, não um bootstrap completo.
+
+Execute `npm run dev`, `npm test` e `npm run build`. As migrações novas estão em `supabase/migrations`. O teste `tests/database-flow.sql` usa um helper temporário e desfaz todas as suas fixtures; cobre inscrição, privacidade, autorização, confirmação manual auditada, aprovação, vagas e rascunhos.
+
+## Pagamentos e acesso
+
+A cobrança de R$ 29,90 ao organizador é separada das inscrições dos atletas. Não marcar pagamentos como aprovados para contornar a cobrança. Os atletas pagam diretamente à organização; a confirmação manual só deve ser usada depois de verificar o crédito. A integração automática por organizador exige onboarding autorizado da conta do provedor e webhooks próprios.
+
+O link privado de acompanhamento contém um identificador de acesso e não deve ser divulgado publicamente. Os e-mails de confirmação e recuperação dependem da configuração, limites e entrega do Supabase Auth; a aplicação não deve afirmar que uma mensagem chegou sem verificar a caixa de entrada.

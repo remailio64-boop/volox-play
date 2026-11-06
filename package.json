@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build && node scripts/build-public-pages.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/regression.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
