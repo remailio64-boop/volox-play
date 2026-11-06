@@ -56,15 +56,8 @@ BEGIN
            WHERE length(btrim(coalesce(a,''))) NOT BETWEEN 2 AND 100)
  THEN RAISE EXCEPTION 'Quantidade ou nomes de atletas invalidos'; END IF;
 
- IF EXISTS (
-   SELECT 1 FROM unnest(p_athletes) AS incoming(name)
-   JOIN public.registrations AS existing
-     ON existing.tournament_id=t.id
-    AND existing.category_id IS NOT DISTINCT FROM p_category_id
-    AND existing.status<>'rejected'
-   CROSS JOIN LATERAL jsonb_array_elements_text(existing.athletes) AS registered(name)
-   WHERE lower(btrim(incoming.name))=lower(btrim(registered.name))
- ) THEN RAISE EXCEPTION 'Atleta ja inscrito nesta categoria'; END IF;
+ -- Athlete names alone are not reliable identities; only enforce distinct names
+ -- inside a single submitted team. Cross-team identity needs an athlete ID.
  IF EXISTS (
    SELECT 1 FROM unnest(p_athletes) AS incoming(name)
    GROUP BY lower(btrim(incoming.name))
