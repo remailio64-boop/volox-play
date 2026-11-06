@@ -105,6 +105,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [trialRemaining,setTrialRemaining]=useState(0);
  const [pixTestBusy,setPixTestBusy]=useState(false);
  const [pixTestResult,setPixTestResult]=useState("");
+ const [diagnosticPix,setDiagnosticPix]=useState<{qr_code:string;qr_code_base64:string|null;payment_id:string}|null>(null);
  async function testPixConnection(){
   setPixTestBusy(true);setPixTestResult("");
   try{
@@ -122,6 +123,17 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   }catch(e){setPixTestResult("Falha no teste: "+message(e))}finally{setPixTestBusy(false)}
  }
 
+ async function generateDiagnosticPix(){
+  if(!window.confirm("Gerar um Pix REAL de R$ 29,90 para teste? O Pix nao sera pago automaticamente e nao criara torneio."))return;
+  setPixTestBusy(true);setPixTestResult("");setDiagnosticPix(null);
+  try{
+   const {data,error}=await supabase.functions.invoke("diagnostico-pix-volox",{body:{action:"create_real_pix"}});
+   if(error){const response=(error as {context?:Response}).context;const details=response&&typeof response.json==="function"?await response.json().catch(()=>null):null;throw Error(details?.details||details?.error||message(error))}
+   if(!data?.pix_generated||!data?.qr_code)throw Error(data?.details||data?.message||"O Mercado Pago nao retornou o Pix.");
+   setDiagnosticPix({qr_code:data.qr_code,qr_code_base64:data.qr_code_base64||null,payment_id:data.payment_id||""});
+   setPixTestResult("Pix real de R$ 29,90 gerado. Nenhum torneio foi criado ou publicado. Nao pague antes de conferir.");
+  }catch(e){setPixTestResult("Falha ao gerar Pix: "+message(e))}finally{setPixTestBusy(false)}
+ }
  async function sortearChaves(categoryId: string) {
   if (!categoryId) { setError("Selecione uma categoria."); return; }
   if (!window.confirm("Confirmar o sorteio desta categoria? Ele não poderá ser repetido.")) return;
@@ -243,7 +255,9 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
    <h2>Diagnóstico de pagamento</h2>
    <p className="muted">Teste técnico do Pix de R$ 29,90, sem publicar torneio e sem consumir gratuidade. Não pague nenhum código gerado neste teste.</p>
    <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void testPixConnection()}>{pixTestBusy?"Verificando...":"Testar conexão com Mercado Pago"}</button>
+   <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void generateDiagnosticPix()}>Gerar Pix real de R$ 29,90 para teste</button>
    {pixTestResult&&<p role="status">{pixTestResult}</p>}
+   {diagnosticPix&&<div className="card"><h3>Pix de validação — R$ 29,90</h3>{diagnosticPix.qr_code_base64&&<img alt="QR Code do Pix de validação" style={{maxWidth:240,width:"100%"}} src={`data:image/png;base64,${diagnosticPix.qr_code_base64}`}/>}<p>Pix copia e cola:</p><textarea readOnly rows={4} style={{width:"100%"}} value={diagnosticPix.qr_code}/><button type="button" onClick={()=>void navigator.clipboard.writeText(diagnosticPix.qr_code)}>Copiar Pix</button><p className="muted">Este Pix é real. Não pague antes de conferir. O teste não publica campeonatos.</p></div>}
   </section>
   <div className="layout">
    <section>
