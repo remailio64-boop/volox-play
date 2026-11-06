@@ -103,37 +103,6 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [paymentStatus,setPaymentStatus]=useState("");
  const [freeOrganizer,setFreeOrganizer]=useState(false);
  const [trialRemaining,setTrialRemaining]=useState(0);
- const [pixTestBusy,setPixTestBusy]=useState(false);
- const [pixTestResult,setPixTestResult]=useState("");
- const [diagnosticPix,setDiagnosticPix]=useState<{qr_code:string;qr_code_base64:string|null;payment_id:string}|null>(null);
- async function testPixConnection(){
-  setPixTestBusy(true);setPixTestResult("");
-  try{
-   const {data,error}=await supabase.functions.invoke("diagnostico-pix-volox",{body:{}});
-   if(error){
-    const response=(error as {context?:Response}).context;
-    if(response && typeof response.json==="function"){
-     const details=await response.json().catch(()=>null);
-     throw Error(details?.error||details?.message||message(error));
-    }
-    throw error;
-   }
-   if(data?.error)throw Error(data.error);
-   setPixTestResult(data?.pix_generated===true?"Pix de teste gerado com sucesso. Não pague esse Pix. Nenhum torneio foi publicado e nenhuma gratuidade foi consumida.":data?.message||data?.error||"Não foi possível confirmar o ambiente de teste do Mercado Pago.");
-  }catch(e){setPixTestResult("Falha no teste: "+message(e))}finally{setPixTestBusy(false)}
- }
-
- async function generateDiagnosticPix(){
-  if(!window.confirm("Gerar um Pix REAL de R$ 29,90 para teste? O Pix nao sera pago automaticamente e nao criara torneio."))return;
-  setPixTestBusy(true);setPixTestResult("");setDiagnosticPix(null);
-  try{
-   const {data,error}=await supabase.functions.invoke("diagnostico-pix-volox",{body:{action:"create_real_pix"}});
-   if(error){const response=(error as {context?:Response}).context;const details=response&&typeof response.json==="function"?await response.json().catch(()=>null):null;throw Error(details?.details||details?.error||message(error))}
-   if(!data?.pix_generated||!data?.qr_code)throw Error(data?.details||data?.message||"O Mercado Pago nao retornou o Pix.");
-   setDiagnosticPix({qr_code:data.qr_code,qr_code_base64:data.qr_code_base64||null,payment_id:data.payment_id||""});
-   setPixTestResult("Pix real de R$ 29,90 gerado. Nenhum torneio foi criado ou publicado. Nao pague antes de conferir.");
-  }catch(e){setPixTestResult("Falha ao gerar Pix: "+message(e))}finally{setPixTestBusy(false)}
- }
  async function sortearChaves(categoryId: string) {
   if (!categoryId) { setError("Selecione uma categoria."); return; }
   if (!window.confirm("Confirmar o sorteio desta categoria? Ele não poderá ser repetido.")) return;
@@ -250,14 +219,6 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const active=list.find(t=>t.id===selected);
  return <main>
   <h1>Painel do organizador</h1>
-  {false&&<section className="card">
-   <h2>Diagnóstico de pagamento</h2>
-   <p className="muted">Teste técnico do Pix de R$ 29,90, sem publicar torneio e sem consumir gratuidade. Não pague nenhum código gerado neste teste.</p>
-   <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void testPixConnection()}>{pixTestBusy?"Verificando...":"Testar conexão com Mercado Pago"}</button>
-   <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void generateDiagnosticPix()}>Gerar Pix real de R$ 29,90 para teste</button>
-   {pixTestResult&&<p role="status">{pixTestResult}</p>}
-   {diagnosticPix&&<div className="card"><h3>Pix de validação — R$ 29,90</h3>{diagnosticPix.qr_code_base64&&<img alt="QR Code do Pix de validação" style={{maxWidth:240,width:"100%"}} src={`data:image/png;base64,${diagnosticPix.qr_code_base64}`}/>}<p>Pix copia e cola:</p><textarea readOnly rows={4} style={{width:"100%"}} value={diagnosticPix.qr_code}/><button type="button" onClick={()=>void navigator.clipboard.writeText(diagnosticPix.qr_code)}>Copiar Pix</button><p className="muted">Este Pix é real. Não pague antes de conferir. O teste não publica campeonatos.</p></div>}
-  </section>}
   <div className="layout">
    <section>
     <h2>Novo campeonato</h2>
