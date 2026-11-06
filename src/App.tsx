@@ -118,7 +118,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     throw error;
    }
    if(data?.error)throw Error(data.error);
-   setPixTestResult(data?.pix_generated?"PIX de teste gerado com sucesso. Nenhum torneio foi publicado e nenhuma gratuidade foi consumida.":"O Mercado Pago respondeu, mas não forneceu um código PIX. Situação: "+String(data?.status||"desconhecida"));
+   setPixTestResult(data?.credential_valid===true?"Conexão autenticada com o Mercado Pago confirmada. Nenhuma cobrança foi criada. O ambiente de teste ainda precisa ser validado antes de gerar PIX.":data?.pix_generated?"PIX de teste gerado com sucesso. Nenhum torneio foi publicado e nenhuma gratuidade foi consumida.":data?.message||"Não foi possível confirmar a conexão com o Mercado Pago.");
   }catch(e){setPixTestResult("Falha no teste: "+message(e))}finally{setPixTestBusy(false)}
  }
 
