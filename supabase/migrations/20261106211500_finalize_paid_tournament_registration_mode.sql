@@ -83,6 +83,7 @@ BEGIN
        OR v_category IS NULL OR length(v_category) < 1 OR length(v_category) > 60
        OR coalesce(c->>'registration_mode','formed') NOT IN ('formed','drawn')
        OR (coalesce(c->>'registration_mode','formed')='drawn' AND v_modality NOT IN ('areia_2x2','areia_4x4','beach_tennis_duplas'))
+       OR (coalesce(c->>'registration_mode','formed')='drawn' AND v_capacity % (CASE WHEN v_modality='areia_4x4' THEN 4 ELSE 2 END) <> 0)
        OR v_fee < 0 OR v_capacity NOT BETWEEN 2 AND 512 THEN
       RAISE EXCEPTION 'Categoria invalida';
     END IF;
