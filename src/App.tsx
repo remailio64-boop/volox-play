@@ -109,7 +109,14 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   setPixTestBusy(true);setPixTestResult("");
   try{
    const {data,error}=await supabase.functions.invoke("diagnostico-pix-volox",{body:{}});
-   if(error)throw error;
+   if(error){
+    const response=(error as {context?:Response}).context;
+    if(response && typeof response.json==="function"){
+     const details=await response.json().catch(()=>null);
+     throw Error(details?.error||details?.message||message(error));
+    }
+    throw error;
+   }
    if(data?.error)throw Error(data.error);
    setPixTestResult(data?.pix_generated?"PIX de teste gerado com sucesso. Nenhum torneio foi publicado e nenhuma gratuidade foi consumida.":"O Mercado Pago respondeu, mas não forneceu um código PIX. Situação: "+String(data?.status||"desconhecida"));
   }catch(e){setPixTestResult("Falha no teste: "+message(e))}finally{setPixTestBusy(false)}
