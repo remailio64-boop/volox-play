@@ -187,7 +187,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   return()=>{stopped=true;clearInterval(timer)};
  },[pix?.payment_row_id,userId]);
  function updateCat(i:number,key:keyof Cat,value:string){
-  setCats(prev=>prev.map((c,j)=>i===j?{...c,[key]:value}:c));
+  setCats(prev=>prev.map((c,j)=>{if(i!==j)return c;const updated={...c,[key]:value};if(key==="modality"&&!["areia_2x2","areia_4x4","beach_tennis_duplas"].includes(value))updated.registration_mode="formed";return updated;}));
  }
  async function create(e:FormEvent){
   e.preventDefault();setBusy(true);setError("");setPaymentStatus("");
