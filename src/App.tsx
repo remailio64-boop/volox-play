@@ -783,8 +783,10 @@ function PublicTournament(){
   try{
    if(!eventState(t).accepting||selected&&selected.status!=="open")throw Error("As inscrições desta categoria estão encerradas.");
    if(athletes.some(x=>!x.trim()))throw Error("Informe todos os atletas titulares.");
-   if(drawn)throw Error("Inscrições individuais serão liberadas após a ativação do sorteio pelo organizador.");
-   const {data,error}=await supabase.rpc("register_team_by_category",{p_tournament_id:t.id,p_category_id:cats.length?catId:null,p_team_name:team.trim(),p_captain_name:captain.trim(),p_captain_email:email.trim(),p_captain_phone:phone.trim(),p_athletes:athletes.map(x=>x.trim())});
+
+   const {data,error}=drawn
+    ?await supabase.rpc("register_drawn_athlete",{p_tournament_id:t.id,p_category_id:catId,p_athlete_name:athletes[0].trim(),p_email:email.trim(),p_phone:phone.trim()})
+    :await supabase.rpc("register_team_by_category",{p_tournament_id:t.id,p_category_id:cats.length?catId:null,p_team_name:team.trim(),p_captain_name:captain.trim(),p_captain_email:email.trim(),p_captain_phone:phone.trim(),p_athletes:athletes.map(x=>x.trim())});
    if(error)throw error;if(!data)throw Error("Não foi possível criar a inscrição.");
    rememberRegistration({id:data,tournament:t.name,category:selected?.name});navigate(`/inscricao/${data}`);
   }catch(e){setErr(message(e))}finally{setSubmitting(false)}
