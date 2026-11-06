@@ -137,6 +137,17 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
    setBusy(false);
   }
  }
+ async function sortearEquipes(categoryId: string) {
+  if (!categoryId) { setError("Selecione uma categoria."); return; }
+  if (!window.confirm("Formar duplas ou quartetos aleatoriamente com os atletas confirmados? Este sorteio não poderá ser repetido.")) return;
+  setBusy(true);setError("");setDrawResult("");
+  try {
+   const { data, error } = await supabase.rpc("draw_category_teams", { p_category_id: categoryId });
+   if (error) throw error;
+   setDrawResult(`Equipes sorteadas: ${data}. O sorteio de chaves é uma etapa separada.`);
+  } catch (err) { setError(message(err)); }
+  finally { setBusy(false); }
+ }
  async function carregarCategorias(tournamentId: string) {
   setError("");
   setDrawResult("");
@@ -309,7 +320,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
 {!drawLoading && drawCategories.length === 0 && <p className="muted">Clique em Sortear Chaves para carregar as categorias.</p>}
 {drawCategories.length > 0 && (
   <div className="card">
-    <h3>🏐 Sorteio das Chaves</h3>
+    <h3>🏐 Sorteios</h3>
 
     <label>
       Escolha a categoria
@@ -329,6 +340,12 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       </select>
     </label>
 
+    <button type="button" disabled={busy || !drawCategoryId}
+      onClick={() => void sortearEquipes(drawCategoryId)}>
+      {busy ? "Aguarde..." : "Sortear duplas ou quartetos"}
+    </button>
+    {drawResult && <p role="status">{drawResult}</p>}
+    <h4>Sorteio das chaves</h4>
     <p className="muted">
       O sorteio utilizará somente equipes aprovadas. São necessárias pelo menos 3 equipes aprovadas.
     </p>
