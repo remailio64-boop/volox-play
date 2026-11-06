@@ -8,15 +8,47 @@ const message = (e:unknown) => e instanceof Error ? e.message : "Ocorreu um erro
 const money = (cents:number) => (cents/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 function App(){
  const [session,setSession]=useState<Session|null>(null); const [ready,setReady]=useState(false);
- useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,s)=>setSession(s));return ()=>subscription.unsubscribe()},[]);
+ const [recovering,setRecovering]=useState(()=>new URLSearchParams(window.location.hash.slice(1)).get("type")==="recovery" || sessionStorage.getItem("volox-password-recovery")==="1");
+ useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{setSession(s);if(event==="PASSWORD_RECOVERY"){sessionStorage.setItem("volox-password-recovery","1");setRecovering(true)}});return ()=>subscription.unsubscribe()},[]);
  if(!ready) return <main>Carregando...</main>;
+ if(recovering) return <ResetPassword session={session} onDone={()=>{sessionStorage.removeItem("volox-password-recovery");setRecovering(false)}}/>;
  return <><header><Link to="/" className="brand">Volox Play</Link><nav>{session?<><Link to="/painel">Meu painel</Link><button className="ghost" onClick={()=>supabase.auth.signOut()}>Sair</button></>:<Link to="/login">Entrar</Link>}</nav></header><Routes><Route path="/" element={<Home/>}/><Route path="/login" element={session?<Navigate to="/painel"/>:<Login/>}/><Route path="/painel" element={session?<Dashboard userId={session.user.id}/>:<Navigate to="/login"/>}/><Route path="/t/:slug" element={<PublicTournament/>}/><Route path="/inscricao/:id" element={<RegistrationStatus/>}/><Route path="*" element={<main>Página não encontrada. <Link to="/">Voltar</Link></main>}/></Routes></>;
 }
 function Home(){return <main className="hero"><span className="eyebrow">Quadra 6×6 • Areia 2×2 • Areia 4×4</span><h1>Seu campeonato organizado. Do cadastro à classificação.</h1><p>Crie torneios, compartilhe inscrições e gerencie equipes pelo celular.</p><Link className="button" to="/login">Sou organizador</Link><p className="muted">Atletas: peça o link público do campeonato ao organizador.</p></main>}
 function Login(){
- const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [mode,setMode]=useState<"login"|"signup">("login");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
- async function submit(e:FormEvent){e.preventDefault();setBusy(true);setInfo("");try{const {error}=mode==="signup"?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});if(error)throw error;if(mode==="signup")setInfo("Conta criada. Se a confirmação por email estiver habilitada, verifique sua caixa de entrada.");}catch(e){setInfo(message(e))}finally{setBusy(false)}}
- return <main className="narrow"><h1>{mode==="login"?"Acesso do organizador":"Criar conta"}</h1><form onSubmit={submit} className="card"><label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Senha<input type="password" minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy}>{busy?"Aguarde...":mode==="login"?"Entrar":"Criar conta"}</button>{info&&<p role="status">{info}</p>}</form><button className="linklike" onClick={()=>setMode(mode==="login"?"signup":"login")}>{mode==="login"?"Ainda não tenho conta":"Já tenho conta"}</button></main>
+ const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [mode,setMode]=useState<"login"|"signup"|"reset">("login");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
+ function changeMode(next:typeof mode){setMode(next);setInfo("");setPassword("")}
+ async function submit(e:FormEvent){
+  e.preventDefault();setBusy(true);setInfo("");
+  try{
+   if(mode==="reset"){
+    const {error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:window.location.origin});
+    if(error)throw error;
+    setInfo("Se houver uma conta com esse e-mail, você receberá um link para criar uma nova senha. Confira também a pasta de spam.");
+   }else{
+    const {error}=mode==="signup"?await supabase.auth.signUp({email:email.trim(),password}):await supabase.auth.signInWithPassword({email:email.trim(),password});
+    if(error)throw error;
+    if(mode==="signup")setInfo("Conta criada. Se a confirmação por email estiver habilitada, verifique sua caixa de entrada.");
+   }
+  }catch(e){setInfo(message(e))}finally{setBusy(false)}
+ }
+ return <main className="narrow"><h1>{mode==="login"?"Acesso do organizador":mode==="signup"?"Criar conta":"Recuperar senha"}</h1><form onSubmit={submit} className="card"><label>E-mail<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>{mode!=="reset"&&<label>Senha<input type="password" autoComplete={mode==="signup"?"new-password":"current-password"} minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy}>{busy?"Aguarde...":mode==="login"?"Entrar":mode==="signup"?"Criar conta":"Enviar link de recuperação"}</button>{info&&<p role="status">{info}</p>}</form>{mode==="login"&&<button className="linklike" disabled={busy} onClick={()=>changeMode("reset")}>Esqueci minha senha</button>}<button className="linklike" disabled={busy} onClick={()=>changeMode(mode==="login"?"signup":"login")}>{mode==="login"?"Ainda não tenho conta":"Voltar para entrar"}</button></main>
+}
+function ResetPassword({session,onDone}:{session:Session|null;onDone:()=>void}){
+ const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
+ const navigate=useNavigate();
+ async function submit(e:FormEvent){
+  e.preventDefault();setInfo("");
+  if(password!==confirm){setInfo("As senhas não coincidem.");return}
+  setBusy(true);
+  try{
+   const {error}=await supabase.auth.updateUser({password});
+   if(error)throw error;
+   navigate("/painel",{replace:true});onDone();
+  }catch(e){setInfo(message(e))}finally{setBusy(false)}
+ }
+ if(!session)return <main className="narrow"><h1>Recuperar senha</h1><p>O link expirou ou é inválido. Solicite um novo link na tela de acesso.</p><button onClick={()=>{navigate("/login",{replace:true});onDone()}}>Voltar para entrar</button></main>;
+ return <main className="narrow"><h1>Criar nova senha</h1><form onSubmit={submit} className="card"><label>Nova senha<input type="password" autoComplete="new-password" minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label><label>Confirme a nova senha<input type="password" autoComplete="new-password" minLength={6} required value={confirm} onChange={e=>setConfirm(e.target.value)}/></label><button disabled={busy}>{busy?"Salvando...":"Salvar nova senha"}</button>{info&&<p role="status">{info}</p>}</form></main>
 }
 function Dashboard({userId}:{userId:string}){
  type Cat={name:string;modality:Modality;fee:string;capacity:string};
