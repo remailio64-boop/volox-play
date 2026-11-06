@@ -66,17 +66,17 @@ export function PublicHome(){
  </>;
 }
 
-export function CompetitionRules({text="",modality,bestOf}:{text?:string;modality?:Modality;bestOf?:number|null}){
+export function CompetitionRules({text="",modality,bestOf,general=false}:{text?:string;modality?:Modality;bestOf?:number|null;general?:boolean}){
  return <section className="competition-rules" aria-labelledby="competition-rules-heading"><h2 id="competition-rules-heading">Regras da competição</h2>
-  <h3>Inscrição e participação</h3><p>{modality?`${modalities[modality]}: ${teamSizes[modality]} atletas titulares por equipe. `:"A quantidade de atletas titulares depende da modalidade escolhida. "}A inscrição é feita nesta página, sem conta de atleta. A participação depende da aprovação da organização e, quando houver cobrança, da confirmação do pagamento.</p>
+  <h3>Inscrição e participação</h3><p>{modality?`${modalities[modality]}: ${teamSizes[modality]} atletas titulares por equipe. `:"A quantidade de atletas titulares depende da modalidade escolhida. "}A inscrição é feita na página do campeonato, sem conta de atleta. A participação depende da aprovação da organização e, quando houver cobrança, da confirmação do pagamento.</p>
   <h3>Formato e pontuação</h3><p>{bestOf===3||bestOf===5?`Nesta categoria, os jogos são em melhor de ${bestOf} sets. `:"O organizador define o formato de sets da categoria antes do primeiro placar. "}No sistema, os sets de quadra vão a 25 pontos e os de areia a 21; o último set decisivo vai a 15. É necessária uma diferença de 2 pontos para encerrar o set.</p>
   <h3>Classificação e desempate</h3><ol><li>Maior número de vitórias.</li><li>Maior saldo de sets: sets ganhos menos sets perdidos.</li><li>Maior saldo de pontos: pontos marcados menos pontos sofridos.</li><li>Confronto direto entre as equipes que permanecem empatadas.</li></ol><p>Se o empate persistir ou faltarem placares para aplicar os critérios, as semifinais ficam bloqueadas até a organização resolver a classificação. No formato de duas chaves, classificam-se as duas primeiras equipes de cada uma: 1ª A × 2ª B e 1ª B × 2ª A.</p>
-  <h3>Regulamento específico do campeonato</h3>{text.trim()?<div className="written-rules">{text}</div>:<p className="muted">O organizador ainda não publicou regras complementares. Horários, local, premiação, tolerância de atraso, W.O. e demais condições devem ser confirmados com a organização antes da inscrição.</p>}
+  <h3>Regulamento específico do campeonato</h3>{general?<p>Confira as condições publicadas pelo organizador na página do campeonato escolhido, incluindo local, horários, premiação e participação.</p>:text.trim()?<div className="written-rules">{text}</div>:<p className="muted">O organizador ainda não publicou regras complementares. Horários, local, premiação, tolerância de atraso, W.O. e demais condições devem ser confirmados com a organização antes da inscrição.</p>}
  </section>;
 }
 
 export function RulesPage(){
- return <main className="narrow rules-page"><Link className="back-link" to="/campeonatos">← Encontrar campeonatos</Link><span className="eyebrow">Antes de entrar em quadra</span><h1>Regras no Volox Play</h1><p>Estas são as regras de funcionamento disponíveis no aplicativo. Consulte também o regulamento específico na página do campeonato escolhido.</p><div className="card"><CompetitionRules/></div><Link className="button" to="/campeonatos">Escolher campeonato</Link></main>;
+ return <main className="narrow rules-page"><Link className="back-link" to="/campeonatos">← Encontrar campeonatos</Link><span className="eyebrow">Antes de entrar em quadra</span><h1>Regras no Volox Play</h1><p>Estas são as regras de funcionamento disponíveis no aplicativo. Consulte também o regulamento específico na página do campeonato escolhido.</p><div className="card"><CompetitionRules general/></div><Link className="button" to="/campeonatos">Escolher campeonato</Link></main>;
 }
 
 export function RulesEditor({tournament,organizerId,onSaved}:{tournament:Tournament;organizerId:string;onSaved:()=>void}){
