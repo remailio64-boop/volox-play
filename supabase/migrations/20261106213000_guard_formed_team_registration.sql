@@ -56,6 +56,20 @@ BEGIN
            WHERE length(btrim(coalesce(a,''))) NOT BETWEEN 2 AND 100)
  THEN RAISE EXCEPTION 'Quantidade ou nomes de atletas invalidos'; END IF;
 
+ IF EXISTS (
+   SELECT 1 FROM unnest(p_athletes) AS incoming(name)
+   JOIN public.registrations AS existing
+     ON existing.tournament_id=t.id
+    AND existing.category_id IS NOT DISTINCT FROM p_category_id
+    AND existing.status<>'rejected'
+   CROSS JOIN LATERAL jsonb_array_elements_text(existing.athletes) AS registered(name)
+   WHERE lower(btrim(incoming.name))=lower(btrim(registered.name))
+ ) THEN RAISE EXCEPTION 'Atleta ja inscrito nesta categoria'; END IF;
+ IF EXISTS (
+   SELECT 1 FROM unnest(p_athletes) AS incoming(name)
+   GROUP BY lower(btrim(incoming.name))
+   HAVING count(*)>1
+ ) THEN RAISE EXCEPTION 'Atleta repetido na mesma equipe'; END IF;
  IF EXISTS(SELECT 1 FROM public.registrations r WHERE r.tournament_id=t.id AND r.category_id IS NOT DISTINCT FROM p_category_id AND r.status<>'rejected' AND lower(btrim(r.captain_email))=lower(btrim(p_captain_email))) THEN RAISE EXCEPTION 'Este e-mail ja esta inscrito nesta categoria'; END IF;
  INSERT INTO public.registrations(
   tournament_id,category_id,team_name,captain_name,captain_email,
