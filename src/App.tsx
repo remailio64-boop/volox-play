@@ -101,6 +101,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [cats,setCats]=useState<Cat[]>([{name:"Dupla Masculina",modality:"areia_2x2",fee:"120",capacity:"16"}]);
  const [pix,setPix]=useState<{payment_row_id:string;qr_code:string|null;qr_code_base64:string|null}|null>(null);
  const [paymentStatus,setPaymentStatus]=useState("");
+ const [freeOrganizer,setFreeOrganizer]=useState(false);
  async function sortearChaves(categoryId: string) {
   if (!categoryId) { setError("Selecione uma categoria."); return; }
   if (!window.confirm("Confirmar o sorteio desta categoria? Ele não poderá ser repetido.")) return;
@@ -145,7 +146,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   const {data,error}=await supabase.from("tournaments").select("*").eq("organizer_id",userId).order("created_at",{ascending:false});
   if(error)setError(error.message);else setList((data||[]) as Tournament[]);
  }
- useEffect(()=>{void load()},[userId]);
+ useEffect(()=>{void load();supabase.rpc("is_free_organizer").then(({data,error})=>{if(!error)setFreeOrganizer(data===true);});},[userId]);
  useEffect(()=>{
   if(!selected){setRegs([]);return;}
   supabase.from("registrations").select("*").eq("tournament_id",selected).order("created_at",{ascending:false})
@@ -182,6 +183,13 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     return {name:c.name.trim(),modality:c.modality,fee_cents,capacity};
    });
    if(name.trim().length<3||!categories.length)throw Error("Informe o campeonato e pelo menos uma categoria.");
+   if(freeOrganizer){
+    const {error:freeError}=await supabase.rpc("create_free_tournament",{p_name:name.trim(),p_categories:categories});
+    if(freeError)throw freeError;
+    setPaymentStatus("Torneio criado gratuitamente. Publique em Meus campeonatos.");
+    await load();
+    return;
+   }
    const {data,error}=await supabase.functions.invoke("criar-pagamento-pix",
     {body:{name:name.trim(),categories}});
    if(error)throw error;
@@ -216,7 +224,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     <h2>Novo campeonato</h2>
     <form className="card" onSubmit={create}>
      <label>Nome do campeonato<input required minLength={3} maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label>
-     <p className="muted">R$ 29,90 uma única vez pelo campeonato. Categorias ilimitadas.</p>
+     <p className="muted">{freeOrganizer?"Arena Volox: publicação gratuita e ilimitada.":"R$ 29,90 uma única vez pelo campeonato. Categorias ilimitadas."}</p>
      {cats.map((c,i)=><div className="card" key={i}>
       <h3>Categoria {i+1}</h3>
       <label>Nome da categoria<input required maxLength={60} value={c.name} onChange={e=>updateCat(i,"name",e.target.value)}/></label>
@@ -228,9 +236,10 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       {cats.length>1&&<button type="button" className="secondary" onClick={()=>setCats(prev=>prev.filter((_,j)=>j!==i))}>Remover categoria</button>}
      </div>)}
      <button type="button" className="secondary" onClick={()=>setCats(prev=>[...prev,{name:"",modality:"areia_2x2",fee:"120",capacity:"16"}])}>+ Adicionar categoria</button>
-     <p className="muted">A cobrança de R$ 29,90 é separada das inscrições das equipes.</p>
-     <button disabled={busy||!!pix}>{busy?"Gerando PIX...":"Gerar PIX de R$ 29,90"}</button>
+     <p className="muted">{freeOrganizer?"Sua conta é isenta da taxa de publicação.":"A cobrança de R$ 29,90 é separada das inscrições das equipes."}</p>
+     <button disabled={busy||!!pix}>{busy?"Aguarde...":freeOrganizer?"Criar torneio gratuitamente":"Gerar PIX de R$ 29,90"}</button>
     </form>
+    {paymentStatus&&!pix&&<p role="status">{paymentStatus}</p>}
     {pix&&<div className="card">
      <h2>Pague o PIX de R$ 29,90</h2>
      {pix.qr_code_base64&&<img alt="QR Code PIX" style={{maxWidth:240,width:"100%"}} src={`data:image/png;base64,${pix.qr_code_base64}`}/>}
