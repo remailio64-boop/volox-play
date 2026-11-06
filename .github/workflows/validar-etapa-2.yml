@@ -1,0 +1,36 @@
+name: Validar etapa 2 (sem publicar)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/inscricoes-equipes-sorteadas
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'supabase/migrations/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validar-etapa-2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  testes-e-compilacao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v4
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Executar testes existentes
+        run: npm test
+      - name: Verificar compilacao
+        run: npm run build
