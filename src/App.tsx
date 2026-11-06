@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams 
 import { supabase } from "./lib/supabase";
 import { CalendarDays, MapPin, Heart, ChevronRight, Users, Trophy, ArrowLeft, Volleyball, Clock } from "lucide-react";
 import { eventState, eventDates, eventPlace, formatDate, readFavorites, writeFavorites, rememberRegistration } from "./lib/athlete";
+import { isBeachTennis, validSetScore, formatLabel, scoringDescription } from "./lib/scoring";
 import { rankGroup } from "./lib/ranking";
 import { CompetitionRules, PublicHome, RulesPage, RulesEditor, PageMetadata, AppScaffold, MyRegistrations } from "./PublicPages";
 import { modalities, teamSizes, type Modality, type Registration, type Tournament } from "./types";
@@ -335,7 +336,7 @@ function JogosPanel({categoryId}:{categoryId:string}){
   if(error)setErr(error.message);
   else if(data){
    setMatches(Array.isArray(data.matches)?data.matches:[]);
-   setBestOf(data.best_of===5?5:3);
+   setBestOf(data.best_of===1?1:data.best_of===5?5:3);
    setModality(data.modality as Modality);
   }
   setLoading(false);
@@ -351,7 +352,7 @@ function JogosPanel({categoryId}:{categoryId:string}){
  }
  function startEdit(m:VoloxMatch){
   setEditing(m.id);
-  const rows=m.set_scores?.length?m.set_scores.map(x=>x.map(String)):[["",""],["",""]];
+  const rows=m.set_scores?.length?m.set_scores.map(x=>x.map(String)) :Array.from({length:Math.ceil(bestOf/2)},()=>["",""]);
   setScores(rows);
   setErr("");setInfo("");
  }
@@ -370,10 +371,8 @@ function JogosPanel({categoryId}:{categoryId:string}){
    const [pa,pb]=parsed[i];
    const target=i===bestOf-1?15:modality==="quadra_6x6"?25:21;
    if(a===targetWins||b===targetWins){setErr("Há sets após o fim da partida.");return;}
-   if(Math.max(pa,pb)<target||Math.abs(pa-pb)<2||
-      (Math.min(pa,pb)<target&&Math.max(pa,pb)!==target)||
-      (Math.min(pa,pb)>=target&&Math.abs(pa-pb)!==2)){
-    setErr(`Placar inválido no ${i+1}º set. Mínimo ${target} pontos e diferença de 2.`);return;
+   if(!validSetScore(modality,bestOf,i,pa,pb)){
+    setErr(isBeachTennis(modality)?"Placar inválido: informe 6–0 a 6–4, 7–5 ou 7–6.":`Placar inválido no ${i+1}º set. Mínimo ${target} pontos e diferença de 2.`);return;
    }
    if(pa>pb)a++;else b++;
   }
@@ -394,11 +393,11 @@ function JogosPanel({categoryId}:{categoryId:string}){
   {info&&<p role="status">{info}</p>}
   {!loading&&<><label>Formato da categoria
    <select disabled={busy} value={bestOf} onChange={e=>void configure(Number(e.target.value))}>
-    <option value={3}>Melhor de 3 sets</option>
+    {isBeachTennis(modality)?<option value={1}>Set único de 6 games</option>:<option value={3}>Melhor de 3 sets</option>}
     {modality==="quadra_6x6"&&<option value={5}>Melhor de 5 sets</option>}
    </select>
   </label>
-  <p className="muted">Quadra: sets até 25, último set até 15. Areia: sets até 21, último até 15. Sempre 2 pontos de diferença. O formato só pode mudar antes do primeiro placar.</p>
+  <p className="muted">{scoringDescription(modality)} O formato só pode mudar antes do primeiro placar.</p>
   {matches.length===0&&<p>Os jogos aparecerão aqui depois do sorteio.</p>}
   {groups.map(group=>{
    const games=matches.filter(m=>m.group_name===group);
@@ -427,9 +426,9 @@ function JogosPanel({categoryId}:{categoryId:string}){
       </div>}
     </div>)}
     <h4>Classificação — {group}</h4>
-    <p className="muted">Vitórias → saldo de sets → saldo de pontos → confronto direto. Empates pendentes não definem classificação.</p>
+    <p className="muted">Vitórias → saldo de sets → saldo de {isBeachTennis(modality)?"games":"pontos"} → confronto direto. Empates pendentes não definem classificação.</p>
     <div className="table-wrap"><table>
-     <thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Sets pró</th><th>Sets contra</th><th>Saldo de sets</th><th>Saldo de pontos</th></tr></thead>
+     <thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Sets pró</th><th>Sets contra</th><th>Saldo de sets</th><th>Saldo de {isBeachTennis(modality)?"games":"pontos"}</th></tr></thead>
      <tbody>{ranking.map(t=><tr key={t.id}><td>{t.tied?"Empate":t.position}</td><td>{t.name}</td><td>{t.j}</td><td>{t.v}</td><td>{t.d}</td><td>{t.sf}</td><td>{t.sc}</td><td>{t.sf-t.sc}</td><td>{t.pf-t.pc}</td></tr>)}</tbody>
     </table></div>
    </div>;
@@ -459,7 +458,7 @@ function EliminatoriasPanel({categoryId}:{categoryId:string}){
   if(error)setErr(error.message);
   else if(data){
    setMatches(Array.isArray(data.matches)?data.matches:[]);
-   setBestOf(data.best_of===5?5:3);
+   setBestOf(data.best_of===1?1:data.best_of===5?5:3);
    setModality(data.modality as Modality);
   }
   setLoading(false);
@@ -479,7 +478,7 @@ function EliminatoriasPanel({categoryId}:{categoryId:string}){
   }catch(e){setErr(message(e))}finally{setBusy(false)}
  }
  function startEdit(m:KnockoutMatch){
-  setEditing(m.id);setScores(m.set_scores?.length?m.set_scores.map(x=>x.map(String)):[["",""],["",""]]);
+  setEditing(m.id);setScores(m.set_scores?.length?m.set_scores.map(x=>x.map(String)) :Array.from({length:Math.ceil(bestOf/2)},()=>["",""]));
   setErr("");setInfo("");
  }
  async function save(m:KnockoutMatch){
@@ -491,9 +490,7 @@ function EliminatoriasPanel({categoryId}:{categoryId:string}){
   let a=0,b=0;
   for(let i=0;i<parsed.length;i++){
    const [pa,pb]=parsed[i],target=i===bestOf-1?15:modality==="quadra_6x6"?25:21;
-   if(a===(bestOf+1)/2||b===(bestOf+1)/2||Math.max(pa,pb)<target||
-     Math.abs(pa-pb)<2||(Math.min(pa,pb)<target&&Math.max(pa,pb)!==target)||
-     (Math.min(pa,pb)>=target&&Math.abs(pa-pb)!==2)){
+   if(a===(bestOf+1)/2||b===(bestOf+1)/2||!validSetScore(modality,bestOf,i,pa,pb)){
     setErr(`Placar inválido no set ${i+1}.`);return;
    }
    if(pa>pb)a++;else b++;
@@ -639,7 +636,7 @@ function PublicacaoResultados({categoryId}:{categoryId:string}){
 type PublicMatch={id?:string;team_a:string;team_b:string;team_a_id?:string;team_b_id?:string;
  sets_a:number|null;sets_b:number|null;status:string;set_scores:number[][]|null;round_number?:number;phase?:string};
 type PublicGroup={name:string;matches:PublicMatch[]};
-function ResultadosPublicos({categoryId}:{categoryId:string}){
+function ResultadosPublicos({categoryId,modality}:{categoryId:string;modality?:Modality}){
  const [data,setData]=useState<{groups:PublicGroup[];knockout:PublicMatch[]}|null>(null);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
@@ -671,8 +668,8 @@ function ResultadosPublicos({categoryId}:{categoryId:string}){
    </div>}
    {(data.groups||[]).map((g,i)=>{
     const ranking=rankGroup(g.matches||[]);
-    return <div className="card" key={i}><h3>{g.name}</h3><p className="muted">Vitórias → saldo de sets → saldo de pontos → confronto direto. Empates pendentes não definem classificação.</p>
-     <div className="table-wrap"><table><thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Saldo de sets</th><th>Saldo de pontos</th></tr></thead>
+    return <div className="card" key={i}><h3>{g.name}</h3><p className="muted">Vitórias → saldo de sets → saldo de {isBeachTennis(modality)?"games":"pontos"} → confronto direto. Empates pendentes não definem classificação.</p>
+     <div className="table-wrap"><table><thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Saldo de sets</th><th>Saldo de {isBeachTennis(modality)?"games":"pontos"}</th></tr></thead>
       <tbody>{ranking.map(t=><tr key={t.id}><td>{t.tied?"Empate":t.position}</td><td>{t.name}</td><td>{t.j}</td><td>{t.v}</td><td>{t.d}</td><td>{t.sf-t.sc}</td><td>{t.pf-t.pc}</td></tr>)}</tbody>
      </table></div>
      {(g.matches||[]).map((m,j)=><p key={m.id||j}>{m.team_a} × {m.team_b} — {m.status==="finished"?`${m.sets_a} × ${m.sets_b}`:"Aguardando placar"}</p>)}
@@ -742,11 +739,11 @@ function PublicTournament(){
   <section className="event-profile-heading"><div><span className={`event-status ${canRegister?"open":""}`}>{canRegister&&<span className="live-dot"/>}{canRegister&&state.phase==="upcoming"?"Inscrições abertas":state.label}</span><h1>{t.name}</h1><div className="event-profile-meta"><span><CalendarDays size={16}/>{eventDates(t)}</span><span><MapPin size={16}/>{eventPlace(t)}</span></div></div><button className={`event-save ${saved?"saved":""}`} aria-pressed={saved} onClick={()=>{try{const next=saved?favorites.filter(id=>id!==t.id):[...favorites,t.id];writeFavorites(next);setFavorites(next);setStorageNotice("")}catch{setStorageNotice("Não foi possível salvar os favoritos neste navegador.")}}}><Heart size={18} fill={saved?"currentColor":"none"}/>{saved?"Salvo":"Salvar"}</button></section>
   {storageNotice&&<p role="status" className="notice">{storageNotice}</p>}
   <nav className="event-tabs" aria-label="Seções do torneio">{[["informacoes","Informações"],["categorias","Categorias"],["regulamento","Regulamento"],["resultados","Jogos e resultados"]].map(([key,label])=><button key={key} aria-current={tab===key?"page":undefined} className={tab===key?"active":""} onClick={()=>showTab(key)}>{label}{key==="categorias"&&<span>{cats.length||1}</span>}</button>)}</nav>
-  {tab==="informacoes"&&<div className="event-details-grid"><section className="card event-description"><h2>Sobre o torneio</h2><p className="written-description">{t.description||"Participe desta competição no Volox Play. Consulte as categorias disponíveis e leia o regulamento antes de fazer sua inscrição."}</p><div className="event-info-line"><CalendarDays size={20}/><div><strong>Quando</strong><p>{eventDates(t)}</p></div></div><div className="event-info-line"><MapPin size={20}/><div><strong>Onde</strong><p>{eventPlace(t)}</p></div></div><div className="event-info-line"><Clock size={20}/><div><strong>Prazo de inscrição</strong><p>{t.registration_deadline?`Até ${formatDate(t.registration_deadline)}, às 23h59 (Brasília)`:"Consulte a organização. Inscrições sujeitas à disponibilidade."}</p></div></div><button className="text-button" onClick={()=>showTab("regulamento")}>Ler regulamento completo <ChevronRight size={17}/></button></section><aside className="card event-entry-summary"><span className="app-eyebrow">SUA PRÓXIMA DISPUTA</span><h2>{canRegister?"Pronto para jogar?":"Acompanhe a competição"}</h2><p>{cats.length||1} categoria{(cats.length||1)===1?"":"s"} · Vôlei e beach vôlei</p><p>Confira valores, modalidade e regulamento antes de se inscrever.</p><button disabled={!canRegister} onClick={()=>showTab("categorias")}>{canRegister?"Escolher categoria":"Inscrições encerradas"}<ChevronRight size={17}/></button><button className="text-button" onClick={()=>showTab("resultados")}>Ver jogos e resultados</button></aside></div>}
-  {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição por equipe, dupla ou quarteto.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null}]).map(c=>{const available=state.accepting&&c.status==="open";return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {teamSizes[c.modality]} atletas por equipe</p><p className="muted">Limite de {c.capacity} equipes · {c.best_of?`Melhor de ${c.best_of} sets`:"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por equipe</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?"Inscrever minha equipe":"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
+  {tab==="informacoes"&&<div className="event-details-grid"><section className="card event-description"><h2>Sobre o torneio</h2><p className="written-description">{t.description||"Participe desta competição no Volox Play. Consulte as categorias disponíveis e leia o regulamento antes de fazer sua inscrição."}</p><div className="event-info-line"><CalendarDays size={20}/><div><strong>Quando</strong><p>{eventDates(t)}</p></div></div><div className="event-info-line"><MapPin size={20}/><div><strong>Onde</strong><p>{eventPlace(t)}</p></div></div><div className="event-info-line"><Clock size={20}/><div><strong>Prazo de inscrição</strong><p>{t.registration_deadline?`Até ${formatDate(t.registration_deadline)}, às 23h59 (Brasília)`:"Consulte a organização. Inscrições sujeitas à disponibilidade."}</p></div></div><button className="text-button" onClick={()=>showTab("regulamento")}>Ler regulamento completo <ChevronRight size={17}/></button></section><aside className="card event-entry-summary"><span className="app-eyebrow">SUA PRÓXIMA DISPUTA</span><h2>{canRegister?"Pronto para jogar?":"Acompanhe a competição"}</h2><p>{cats.length||1} categoria{(cats.length||1)===1?"":"s"} · Vôlei e Beach Tennis</p><p>Confira valores, modalidade e regulamento antes de se inscrever.</p><button disabled={!canRegister} onClick={()=>showTab("categorias")}>{canRegister?"Escolher categoria":"Inscrições encerradas"}<ChevronRight size={17}/></button><button className="text-button" onClick={()=>showTab("resultados")}>Ver jogos e resultados</button></aside></div>}
+  {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição individual, por dupla ou por equipe.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null}]).map(c=>{const available=state.accepting&&c.status==="open";return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {teamSizes[c.modality]} {teamSizes[c.modality]===1?"atleta":"atletas"} por equipe</p><p className="muted">Limite de {c.capacity} equipes · {c.best_of?formatLabel(c.modality,c.best_of):"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por equipe</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?"Inscrever minha equipe":"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
   {tab==="regulamento"&&<div className="card">{cats.length>0&&picker}<CompetitionRules text={t.competition_rules||""} modality={modality} bestOf={selected?.best_of}/></div>}
-  {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}<ResultadosPublicos categoryId={catId}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
-  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&<p className="notice">O pagamento da inscrição ainda não está disponível pelo aplicativo. A inscrição ficará aguardando pagamento e não confirma a participação. Consulte a organização antes de prosseguir.</p>}<form onSubmit={submit}><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome da equipe / dupla / quarteto<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label><div className="form-section-label">02 · RESPONSÁVEL</div><label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label><div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · ATLETAS TITULARES ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
+  {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}<ResultadosPublicos categoryId={catId} modality={modality}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
+  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&<p className="notice">O pagamento da inscrição ainda não está disponível pelo aplicativo. A inscrição ficará aguardando pagamento e não confirma a participação. Consulte a organização antes de prosseguir.</p>}<form onSubmit={submit}><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome do atleta / dupla / equipe<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label><div className="form-section-label">02 · RESPONSÁVEL</div><label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label><div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · ATLETAS TITULARES ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
  </AppScaffold>;
 }
 function RegistrationStatus(){
