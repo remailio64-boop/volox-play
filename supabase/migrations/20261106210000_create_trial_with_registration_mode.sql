@@ -18,7 +18,9 @@ begin
    or coalesce(c->>'modality','') not in ('areia_2x2','areia_4x4','quadra_6x6','beach_tennis_duplas','beach_tennis_simples')
    or coalesce(c->>'registration_mode','formed') not in ('formed','drawn')
    or (coalesce(c->>'registration_mode','formed')='drawn' and c->>'modality' not in ('areia_2x2','areia_4x4','beach_tennis_duplas'))
-   or (coalesce(c->>'registration_mode','formed')='drawn' and coalesce(c->>'capacity','') ~ '^[0-9]{1,3}
+   or (coalesce(c->>'registration_mode','formed')='drawn'
+       and coalesce(c->>'capacity','') ~ '^[0-9]{1,3}$'
+       and (c->>'capacity')::int % (case when c->>'modality'='areia_4x4' then 4 else 2 end) <> 0)
    or coalesce(c->>'fee_cents','') !~ '^[0-9]{1,9}$'
    or coalesce(c->>'capacity','') !~ '^[0-9]{1,3}$'
    or (c->>'capacity')::int not between 2 and 512
