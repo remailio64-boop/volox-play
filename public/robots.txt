@@ -3,5 +3,7 @@ Allow: /
 Disallow: /painel
 Disallow: /login
 Disallow: /inscricao/
+Disallow: /favoritos
+Disallow: /minhas-inscricoes
 
 Sitemap: https://volox-play.vercel.app/sitemap.xml

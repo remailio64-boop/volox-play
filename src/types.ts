@@ -1,5 +1,5 @@
 export type Modality = "quadra_6x6" | "areia_2x2" | "areia_4x4";
-export type Tournament = { id:string; organizer_id:string; name:string; slug:string; modality:Modality; category:string; fee_cents:number; capacity:number; approval_mode:"manual"; status:"draft"|"open"|"closed"; created_at:string; competition_rules?:string; };
+export type Tournament = { id:string; organizer_id:string; name:string; slug:string; modality:Modality; category:string; fee_cents:number; capacity:number; approval_mode:"manual"; status:"draft"|"open"|"closed"; created_at:string; competition_rules?:string; event_start_date?:string|null; event_end_date?:string|null; registration_deadline?:string|null; venue_name?:string; city?:string; state_code?:string; description?:string; };
 export type Registration = { id:string; tournament_id:string; team_name:string; captain_name:string; captain_email:string; captain_phone:string; athletes:string[]; status:"pending"|"approved"|"rejected"; payment_status:"not_required"|"awaiting_provider"|"pending"|"paid"; created_at:string; };
 export const modalities:Record<Modality,string> = {quadra_6x6:"Quadra 6×6",areia_2x2:"Areia 2×2",areia_4x4:"Areia 4×4"};
 export const teamSizes:Record<Modality,number> = {quadra_6x6:6,areia_2x2:2,areia_4x4:4};

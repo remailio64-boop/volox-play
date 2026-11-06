@@ -15,6 +15,14 @@
     {
       "source": "/login",
       "destination": "/index.html"
+    },
+    {
+      "source": "/favoritos",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/minhas-inscricoes",
+      "destination": "/index.html"
     }
   ],
   "headers": [
@@ -38,6 +46,24 @@
     },
     {
       "source": "/inscricao/:id",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/favoritos",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/minhas-inscricoes",
       "headers": [
         {
           "key": "X-Robots-Tag",
