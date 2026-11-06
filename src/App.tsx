@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "./lib/supabase";
+import { rankGroup } from "./lib/ranking";
+import { CompetitionRules, PublicHome, RulesPage, RulesEditor, PageMetadata } from "./PublicPages";
 import { modalities, teamSizes, type Modality, type Registration, type Tournament } from "./types";
 import type { Session } from "@supabase/supabase-js";
 
@@ -12,9 +14,8 @@ function App(){
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{setSession(s);if(event==="PASSWORD_RECOVERY"){sessionStorage.setItem("volox-password-recovery","1");setRecovering(true)}});return ()=>subscription.unsubscribe()},[]);
  if(!ready) return <main>Carregando...</main>;
  if(recovering) return <ResetPassword session={session} onDone={()=>{sessionStorage.removeItem("volox-password-recovery");setRecovering(false)}}/>;
- return <><header><Link to="/" className="brand">Volox Play</Link><nav>{session?<><Link to="/painel">Meu painel</Link><button className="ghost" onClick={()=>supabase.auth.signOut()}>Sair</button></>:<Link to="/login">Entrar</Link>}</nav></header><Routes><Route path="/" element={<Home/>}/><Route path="/login" element={session?<Navigate to="/painel"/>:<Login/>}/><Route path="/painel" element={session?<Dashboard userId={session.user.id}/>:<Navigate to="/login"/>}/><Route path="/t/:slug" element={<PublicTournament/>}/><Route path="/inscricao/:id" element={<RegistrationStatus/>}/><Route path="*" element={<main>Página não encontrada. <Link to="/">Voltar</Link></main>}/></Routes></>;
+ return <><PageMetadata/><header><Link to="/" className="brand">Volox Play</Link><nav><Link to="/campeonatos">Campeonatos</Link><Link to="/regras">Regras</Link>{session?<><Link to="/painel">Meu painel</Link><button className="ghost" onClick={()=>supabase.auth.signOut()}>Sair</button></>:<Link to="/login">Entrar</Link>}</nav></header><Routes><Route path="/" element={<PublicHome/>}/><Route path="/campeonatos" element={<PublicHome/>}/><Route path="/regras" element={<RulesPage/>}/><Route path="/login" element={session?<Navigate to="/painel"/>:<Login/>}/><Route path="/painel" element={session?<Dashboard userId={session.user.id}/>:<Navigate to="/login"/>}/><Route path="/t/:slug" element={<PublicTournament/>}/><Route path="/inscricao/:id" element={<RegistrationStatus/>}/><Route path="*" element={<main>Página não encontrada. <Link to="/">Voltar</Link></main>}/></Routes></>;
 }
-function Home(){return <main className="hero"><span className="eyebrow">Quadra 6×6 • Areia 2×2 • Areia 4×4</span><h1>Seu campeonato organizado. Do cadastro à classificação.</h1><p>Crie torneios, compartilhe inscrições e gerencie equipes pelo celular.</p><Link className="button" to="/login">Sou organizador</Link><p className="muted">Atletas: peça o link público do campeonato ao organizador.</p></main>}
 function Login(){
  const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [mode,setMode]=useState<"login"|"signup"|"reset">("login");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
  function changeMode(next:typeof mode){setMode(next);setInfo("");setPassword("")}
@@ -221,7 +222,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
      <h3>{t.name}</h3>
      <p>{modalities[t.modality]} • {t.category} • {money(t.fee_cents)}</p>
      <p><Link to={`/t/${t.slug}`}>Página pública</Link></p>
-     <button className="secondary" onClick={()=>setSelected(t.id)}>Gerenciar inscrições</button>
+     <button className="secondary" onClick={()=>setSelected(t.id)}>Inscrições e regulamento</button>
 <button
   className="secondary"
  onClick={() => {
@@ -237,6 +238,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   {error&&<p className="error" role="alert">{error}</p>}
   {active&&<section>
    <h2>Inscrições — {active.name}</h2>
+   <RulesEditor tournament={active} organizerId={userId} onSaved={()=>void load()}/>
 {drawLoading && <p>Carregando categorias...</p>}
 {!drawLoading && drawCategories.length === 0 && <p className="muted">Clique em Sortear Chaves para carregar as categorias.</p>}
 {drawCategories.length > 0 && (
@@ -398,18 +400,7 @@ function JogosPanel({categoryId}:{categoryId:string}){
   {matches.length===0&&<p>Os jogos aparecerão aqui depois do sorteio.</p>}
   {groups.map(group=>{
    const games=matches.filter(m=>m.group_name===group);
-   const table=new Map<string,{name:string;j:number;v:number;d:number;sf:number;sc:number}>();
-   games.forEach(m=>{
-    for(const [id,name] of [[m.team_a_id,m.team_a],[m.team_b_id,m.team_b]]){
-     if(!table.has(id))table.set(id,{name,j:0,v:0,d:0,sf:0,sc:0});
-    }
-    if(m.status==="finished"&&m.sets_a!==null&&m.sets_b!==null){
-     const a=table.get(m.team_a_id)!,b=table.get(m.team_b_id)!;
-     a.j++;b.j++;a.sf+=m.sets_a;a.sc+=m.sets_b;b.sf+=m.sets_b;b.sc+=m.sets_a;
-     if(m.sets_a>m.sets_b){a.v++;b.d++;}else{b.v++;a.d++;}
-    }
-   });
-   const ranking=[...table.values()].sort((a,b)=>b.v-a.v||(b.sf-b.sc)-(a.sf-a.sc)||b.sf-a.sf||a.name.localeCompare(b.name));
+   const ranking=rankGroup(games);
    return <div key={group} className="card">
     <h4>{group} — {games.length} jogos</h4>
     {games.map(m=><div key={m.id} className="card">
@@ -434,9 +425,10 @@ function JogosPanel({categoryId}:{categoryId:string}){
       </div>}
     </div>)}
     <h4>Classificação — {group}</h4>
+    <p className="muted">Vitórias → saldo de sets → saldo de pontos → confronto direto. Empates pendentes não definem classificação.</p>
     <div className="table-wrap"><table>
-     <thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Sets pró</th><th>Sets contra</th><th>Saldo</th></tr></thead>
-     <tbody>{ranking.map((t,i)=><tr key={t.name}><td>{i+1}</td><td>{t.name}</td><td>{t.j}</td><td>{t.v}</td><td>{t.d}</td><td>{t.sf}</td><td>{t.sc}</td><td>{t.sf-t.sc}</td></tr>)}</tbody>
+     <thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Sets pró</th><th>Sets contra</th><th>Saldo de sets</th><th>Saldo de pontos</th></tr></thead>
+     <tbody>{ranking.map(t=><tr key={t.id}><td>{t.tied?"Empate":t.position}</td><td>{t.name}</td><td>{t.j}</td><td>{t.v}</td><td>{t.d}</td><td>{t.sf}</td><td>{t.sc}</td><td>{t.sf-t.sc}</td><td>{t.pf-t.pc}</td></tr>)}</tbody>
     </table></div>
    </div>;
   })}
@@ -676,22 +668,10 @@ function ResultadosPublicos({categoryId}:{categoryId:string}){
     {third&&winner(third)&&<p>🥉 Terceiro lugar: <strong>{winner(third)}</strong></p>}
    </div>}
    {(data.groups||[]).map((g,i)=>{
-    const teams=new Map<string,{name:string;j:number;v:number;d:number;sf:number;sc:number;pf:number;pc:number}>();
-    for(const m of g.matches||[]){
-     for(const [id,name] of [[m.team_a_id,m.team_a],[m.team_b_id,m.team_b]] as [string|undefined,string][])
-      if(id&&!teams.has(id))teams.set(id,{name,j:0,v:0,d:0,sf:0,sc:0,pf:0,pc:0});
-     if(m.status!=="finished"||m.sets_a===null||m.sets_b===null)continue;
-     const a=teams.get(m.team_a_id||""),b=teams.get(m.team_b_id||"");
-     if(!a||!b)continue;
-     a.j++;b.j++;a.sf+=m.sets_a;a.sc+=m.sets_b;b.sf+=m.sets_b;b.sc+=m.sets_a;
-     if(m.sets_a>m.sets_b){a.v++;b.d++}else{b.v++;a.d++}
-     for(const [pa,pb] of m.set_scores||[]){a.pf+=pa;a.pc+=pb;b.pf+=pb;b.pc+=pa}
-    }
-    const ranking=[...teams.values()].sort((a,b)=>b.v-a.v||
-      (b.sf-b.sc)-(a.sf-a.sc)||(b.pf-b.pc)-(a.pf-a.pc)||a.name.localeCompare(b.name));
-    return <div className="card" key={i}><h3>{g.name}</h3>
+    const ranking=rankGroup(g.matches||[]);
+    return <div className="card" key={i}><h3>{g.name}</h3><p className="muted">Vitórias → saldo de sets → saldo de pontos → confronto direto. Empates pendentes não definem classificação.</p>
      <div className="table-wrap"><table><thead><tr><th>Pos.</th><th>Equipe</th><th>Jogos</th><th>Vitórias</th><th>Derrotas</th><th>Saldo de sets</th><th>Saldo de pontos</th></tr></thead>
-      <tbody>{ranking.map((t,j)=><tr key={j}><td>{j+1}</td><td>{t.name}</td><td>{t.j}</td><td>{t.v}</td><td>{t.d}</td><td>{t.sf-t.sc}</td><td>{t.pf-t.pc}</td></tr>)}</tbody>
+      <tbody>{ranking.map(t=><tr key={t.id}><td>{t.tied?"Empate":t.position}</td><td>{t.name}</td><td>{t.j}</td><td>{t.v}</td><td>{t.d}</td><td>{t.sf-t.sc}</td><td>{t.pf-t.pc}</td></tr>)}</tbody>
      </table></div>
      {(g.matches||[]).map((m,j)=><p key={m.id||j}>{m.team_a} × {m.team_b} — {m.status==="finished"?`${m.sets_a} × ${m.sets_b}`:"Aguardando placar"}</p>)}
     </div>;
@@ -712,7 +692,7 @@ function ResultadosPublicos({categoryId}:{categoryId:string}){
 
 function PublicTournament(){
  const {slug}=useParams();
- type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string};
+ type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string;best_of:number|null};
  const [t,setT]=useState<Tournament|null>(null);
  const [cats,setCats]=useState<PublicCat[]>([]);
  const [catId,setCatId]=useState("");
@@ -735,7 +715,7 @@ function PublicTournament(){
    if(error||!data){setErr(error?.message||"Campeonato indisponível.");setLoading(false);return;}
    const found=data as Tournament;
    const result=await supabase.from("tournament_categories")
-     .select("id,name,modality,fee_cents,capacity,status").eq("tournament_id",found.id).eq("status","open").order("created_at");
+     .select("id,name,modality,fee_cents,capacity,status,best_of").eq("tournament_id",found.id).eq("status","open").order("created_at");
    if(cancelled)return;
    if(result.error){setErr("Não foi possível carregar as categorias: "+result.error.message);setLoading(false);return;}
    setT(found);setCats((result.data||[]) as PublicCat[]);
@@ -767,6 +747,7 @@ function PublicTournament(){
  if(loading)return <main>Carregando campeonato...</main>;
  if(!t)return <main className="narrow"><h1>Campeonato</h1><p className="error">{err}</p></main>;
  return <main className="narrow">
+  <Link className="back-link" to="/campeonatos">← Todos os campeonatos</Link>
   <span className="eyebrow">Inscrições abertas</span><h1>{t.name}</h1>
   {cats.length===0&&<p className="muted">Inscrição no formato original do campeonato.</p>}
   <div className="card">
@@ -776,6 +757,7 @@ function PublicTournament(){
     </select>
    </label>}
    {catId&&<ResultadosPublicos categoryId={catId}/>}
+   <CompetitionRules text={t.competition_rules||""} modality={modality} bestOf={selected?.best_of} />
    <p>{modality?modalities[modality]:""}</p>
    <h2>{fee===0?"Inscrição gratuita":`Inscrição: ${money(fee)}`}</h2>
    {fee>0&&<p className="notice">O PIX das inscrições das equipes ainda não está integrado. A inscrição ficará pendente até a confirmação do pagamento por um sistema futuro.</p>}

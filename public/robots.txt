@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /painel
+Disallow: /login
+Disallow: /inscricao/
+
+Sitemap: https://volox-play.vercel.app/sitemap.xml

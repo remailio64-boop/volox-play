@@ -1,0 +1,14 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/t/:slug", "destination": "/index.html" },
+    { "source": "/inscricao/:id", "destination": "/index.html" },
+    { "source": "/painel", "destination": "/index.html" },
+    { "source": "/login", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/login", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    { "source": "/painel", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    { "source": "/inscricao/:id", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
+  ]
+}
