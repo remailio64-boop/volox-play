@@ -197,6 +197,11 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     const capacity=Number(c.capacity);
     if(!c.name.trim()||!Number.isSafeInteger(fee_cents)||fee_cents<0||
       !Number.isInteger(capacity)||capacity<2||capacity>512)throw Error("Confira os dados das categorias.");
+    if(c.registration_mode==="drawn"){
+      const teamSize=c.modality==="areia_4x4"?4:2;
+      if(!["areia_2x2","areia_4x4","beach_tennis_duplas"].includes(c.modality)||capacity%teamSize!==0)
+        throw Error("Nas categorias sorteadas, a capacidade deve ser múltipla de "+teamSize+" atletas.");
+    }
     return {name:c.name.trim(),modality:c.modality,registration_mode:c.registration_mode,fee_cents,capacity};
    });
    if(name.trim().length<3||!categories.length)throw Error("Informe o campeonato e pelo menos uma categoria.");
