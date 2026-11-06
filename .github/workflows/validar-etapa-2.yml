@@ -1,0 +1,59 @@
+name: Validar etapa 2 (sem publicar)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/inscricoes-equipes-sorteadas
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'supabase/migrations/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validar-etapa-2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  testes-inscricoes-banco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: volox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v4
+      - name: Testar inscricoes em banco descartavel
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d volox_test -v ON_ERROR_STOP=1 -f tests/etapa2-db.sql
+  testes-e-compilacao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v4
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Executar testes existentes
+        run: npm test
+      - name: Verificar compilacao
+        run: npm run build

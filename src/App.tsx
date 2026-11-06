@@ -66,7 +66,7 @@ function ResetPassword({session,onDone}:{session:Session|null;onDone:()=>void}){
  return <main className="narrow"><h1>Criar nova senha</h1><form onSubmit={submit} className="card"><label>Nova senha<input type="password" autoComplete="new-password" minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label><label>Confirme a nova senha<input type="password" autoComplete="new-password" minLength={6} required value={confirm} onChange={e=>setConfirm(e.target.value)}/></label><button disabled={busy}>{busy?"Salvando...":"Salvar nova senha"}</button>{info&&<p role="status">{info}</p>}</form></main>
 }
 function Dashboard({userId}:{userId:string}){
- type Cat={name:string;modality:Modality;fee:string;capacity:string};
+ type Cat={name:string;modality:Modality;registration_mode:"formed"|"drawn";fee:string;capacity:string};
  const [list,setList]=useState<Tournament[]>([]);
  const [selected,setSelected]=useState<string|null>(null);
 const [drawCategories,setDrawCategories]=useState<{id:string;name:string}[]>([]);
@@ -98,7 +98,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
  const [name,setName]=useState("Copa Vôlei Assis");
- const [cats,setCats]=useState<Cat[]>([{name:"Dupla Masculina",modality:"areia_2x2",fee:"120",capacity:"16"}]);
+ const [cats,setCats]=useState<Cat[]>([{name:"Dupla Masculina",modality:"areia_2x2",registration_mode:"formed",fee:"120",capacity:"16"}]);
  const [pix,setPix]=useState<{payment_row_id:string;qr_code:string|null;qr_code_base64:string|null}|null>(null);
  const [paymentStatus,setPaymentStatus]=useState("");
  const [freeOrganizer,setFreeOrganizer]=useState(false);
@@ -187,7 +187,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   return()=>{stopped=true;clearInterval(timer)};
  },[pix?.payment_row_id,userId]);
  function updateCat(i:number,key:keyof Cat,value:string){
-  setCats(prev=>prev.map((c,j)=>i===j?{...c,[key]:value}:c));
+  setCats(prev=>prev.map((c,j)=>{if(i!==j)return c;const updated={...c,[key]:value};if(key==="modality"&&!["areia_2x2","areia_4x4","beach_tennis_duplas"].includes(value))updated.registration_mode="formed";return updated;}));
  }
  async function create(e:FormEvent){
   e.preventDefault();setBusy(true);setError("");setPaymentStatus("");
@@ -197,7 +197,12 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     const capacity=Number(c.capacity);
     if(!c.name.trim()||!Number.isSafeInteger(fee_cents)||fee_cents<0||
       !Number.isInteger(capacity)||capacity<2||capacity>512)throw Error("Confira os dados das categorias.");
-    return {name:c.name.trim(),modality:c.modality,fee_cents,capacity};
+    if(c.registration_mode==="drawn"){
+      const teamSize=c.modality==="areia_4x4"?4:2;
+      if(!["areia_2x2","areia_4x4","beach_tennis_duplas"].includes(c.modality)||capacity%teamSize!==0)
+        throw Error("Nas categorias sorteadas, a capacidade deve ser múltipla de "+teamSize+" atletas.");
+    }
+    return {name:c.name.trim(),modality:c.modality,registration_mode:c.registration_mode,fee_cents,capacity};
    });
    if(name.trim().length<3||!categories.length)throw Error("Informe o campeonato e pelo menos uma categoria.");
    if(freeOrganizer||trialRemaining>0){
@@ -255,11 +260,12 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       <label>Modalidade<select value={c.modality} onChange={e=>updateCat(i,"modality",e.target.value)}>
        {Object.entries(modalities).map(([k,v])=><option key={k} value={k}>{v}</option>)}
       </select></label>
-      <label>Inscrição por equipe (R$)<input type="number" min="0" step="0.01" value={c.fee} onChange={e=>updateCat(i,"fee",e.target.value)}/></label>
+      <label>Formato de inscrição<select value={c.registration_mode} onChange={e=>updateCat(i,"registration_mode",e.target.value)}><option value="formed">Equipe formada</option><option value="drawn" disabled={teamSizes[c.modality]!==2&&teamSizes[c.modality]!==4}>Atletas individuais — equipes sorteadas</option></select></label>
+      <label>{c.registration_mode==="drawn"?"Inscrição por atleta (R$)":"Inscrição por equipe (R$)"}<input type="number" min="0" step="0.01" value={c.fee} onChange={e=>updateCat(i,"fee",e.target.value)}/></label>
       <label>Máximo de equipes<input type="number" min="2" max="512" value={c.capacity} onChange={e=>updateCat(i,"capacity",e.target.value)}/></label>
       {cats.length>1&&<button type="button" className="secondary" onClick={()=>setCats(prev=>prev.filter((_,j)=>j!==i))}>Remover categoria</button>}
      </div>)}
-     <button type="button" className="secondary" onClick={()=>setCats(prev=>[...prev,{name:"",modality:"areia_2x2",fee:"120",capacity:"16"}])}>+ Adicionar categoria</button>
+     <button type="button" className="secondary" onClick={()=>setCats(prev=>[...prev,{name:"",modality:"areia_2x2",registration_mode:"formed",fee:"120",capacity:"16"}])}>+ Adicionar categoria</button>
      <p className="muted">{freeOrganizer?"Sua conta é isenta da taxa de publicação.":trialRemaining>0?"A gratuidade é consumida na primeira publicação, não na criação.":"A cobrança de R$ 29,90 é separada das inscrições das equipes."}</p>
      <button disabled={busy||!!pix}>{busy?"Aguarde...":freeOrganizer||trialRemaining>0?"Criar torneio gratuitamente":"Gerar PIX de R$ 29,90"}</button>
     </form>
@@ -748,7 +754,7 @@ function ResultadosPublicos({categoryId,modality}:{categoryId:string;modality?:M
 
 function PublicTournament(){
  const {slug}=useParams();const [params,setParams]=useSearchParams();
- type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string;best_of:number|null};
+ type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string;best_of:number|null;registration_mode:"formed"|"drawn"};
  const [t,setT]=useState<Tournament|null>(null);const [cats,setCats]=useState<PublicCat[]>([]);const [catId,setCatId]=useState("");
  const [err,setErr]=useState("");const [loading,setLoading]=useState(true);const [team,setTeam]=useState("");const [captain,setCaptain]=useState("");
  const [email,setEmail]=useState("");const [phone,setPhone]=useState("");const [athletes,setAthletes]=useState<string[]>([]);const [submitting,setSubmitting]=useState(false);
@@ -762,7 +768,7 @@ function PublicTournament(){
    if(cancelled)return;
    if(error||!data){setErr("Este torneio não está disponível para consulta pública.");setLoading(false);return}
    const found=data as Tournament;
-   const result=await supabase.from("tournament_categories").select("id,name,modality,fee_cents,capacity,status,best_of").eq("tournament_id",found.id).order("created_at");
+   const result=await supabase.from("tournament_categories").select("id,name,modality,fee_cents,capacity,status,best_of,registration_mode").eq("tournament_id",found.id).order("created_at");
    if(cancelled)return;
    if(result.error){setErr("Não foi possível carregar as categorias.");setLoading(false);return}
    setT(found);setCats((result.data||[]) as PublicCat[]);
@@ -773,7 +779,8 @@ function PublicTournament(){
   void load();return()=>{cancelled=true};
  },[slug]);
  useEffect(()=>{if(t){document.title=`${t.name} | VoloxPlay`;document.querySelector('meta[property="og:title"]')?.setAttribute("content",document.title)}},[t]);
- const selected=cats.find(c=>c.id===catId);const modality=selected?.modality||t?.modality;const fee=selected?.fee_cents??t?.fee_cents??0;const count=modality?teamSizes[modality]:0;
+ const selected=cats.find(c=>c.id===catId);const modality=selected?.modality||t?.modality;const fee=selected?.fee_cents??t?.fee_cents??0;const drawn=selected?.registration_mode==="drawn";
+ const count=drawn?1:modality?teamSizes[modality]:0;
  useEffect(()=>{if(count)setAthletes(Array(count).fill(""))},[catId,count]);
  function showTab(next:string,category?:string){const updated=new URLSearchParams(params);updated.set("aba",next);if(category){setCatId(category);updated.set("categoria",category)}setParams(updated)}
  async function submit(e:FormEvent){
@@ -781,7 +788,10 @@ function PublicTournament(){
   try{
    if(!eventState(t).accepting||selected&&selected.status!=="open")throw Error("As inscrições desta categoria estão encerradas.");
    if(athletes.some(x=>!x.trim()))throw Error("Informe todos os atletas titulares.");
-   const {data,error}=await supabase.rpc("register_team_by_category",{p_tournament_id:t.id,p_category_id:cats.length?catId:null,p_team_name:team.trim(),p_captain_name:captain.trim(),p_captain_email:email.trim(),p_captain_phone:phone.trim(),p_athletes:athletes.map(x=>x.trim())});
+
+   const {data,error}=drawn
+    ?await supabase.rpc("register_drawn_athlete",{p_tournament_id:t.id,p_category_id:catId,p_athlete_name:athletes[0].trim(),p_email:email.trim(),p_phone:phone.trim()})
+    :await supabase.rpc("register_team_by_category",{p_tournament_id:t.id,p_category_id:cats.length?catId:null,p_team_name:team.trim(),p_captain_name:captain.trim(),p_captain_email:email.trim(),p_captain_phone:phone.trim(),p_athletes:athletes.map(x=>x.trim())});
    if(error)throw error;if(!data)throw Error("Não foi possível criar a inscrição.");
    rememberRegistration({id:data,tournament:t.name,category:selected?.name});navigate(`/inscricao/${data}`);
   }catch(e){setErr(message(e))}finally{setSubmitting(false)}
@@ -800,7 +810,7 @@ function PublicTournament(){
   {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição individual, por dupla ou por equipe.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null}]).map(c=>{const available=state.accepting&&c.status==="open";return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {teamSizes[c.modality]} {teamSizes[c.modality]===1?"atleta":"atletas"} por equipe</p><p className="muted">Limite de {c.capacity} equipes · {c.best_of?formatLabel(c.modality,c.best_of):"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por equipe</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?"Inscrever minha equipe":"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
   {tab==="regulamento"&&<div className="card">{cats.length>0&&picker}<CompetitionRules text={t.competition_rules||""} modality={modality} bestOf={selected?.best_of}/></div>}
   {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}<ResultadosPublicos categoryId={catId} modality={modality}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
-  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&t.payment_instructions&&<div className="written-rules"><h3>Pagamento à organização</h3><p>{t.payment_instructions}</p></div>}{fee>0&&<p className="notice">O pagamento é feito diretamente à organização, fora do aplicativo. Sua inscrição ficará aguardando a conferência manual do recebimento e a aprovação da organização. Não há débito automático.</p>}<form onSubmit={submit}><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome do atleta / dupla / equipe<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label><div className="form-section-label">02 · RESPONSÁVEL</div><label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label><div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · ATLETAS TITULARES ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
+  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&t.payment_instructions&&<div className="written-rules"><h3>Pagamento à organização</h3><p>{t.payment_instructions}</p></div>}{fee>0&&<p className="notice">O pagamento é feito diretamente à organização, fora do aplicativo. Sua inscrição ficará aguardando a conferência manual do recebimento e a aprovação da organização. Não há débito automático.</p>}<form onSubmit={submit}>{!drawn&&<><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome do atleta / dupla / equipe<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label></>}<div className="form-section-label">02 · CONTATO</div>{!drawn&&<label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label>}<div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · {drawn?"INSCRIÇÃO INDIVIDUAL":"ATLETAS TITULARES"} ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
  </AppScaffold>;
 }
 function RegistrationStatus(){
