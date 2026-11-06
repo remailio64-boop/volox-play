@@ -103,6 +103,23 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [paymentStatus,setPaymentStatus]=useState("");
  const [freeOrganizer,setFreeOrganizer]=useState(false);
  const [trialRemaining,setTrialRemaining]=useState(0);
+ const [asaasTestBusy,setAsaasTestBusy]=useState(false);
+ const [asaasTestMessage,setAsaasTestMessage]=useState("");
+ const [asaasTestPix,setAsaasTestPix]=useState<{qr_code:string;qr_code_base64:string|null}|null>(null);
+ async function testAsaasPix(){
+  if(!window.confirm("Gerar um Pix REAL de R$ 29,90 para teste? Nenhum pagamento sera efetuado automaticamente."))return;
+  setAsaasTestBusy(true);setAsaasTestMessage("");setAsaasTestPix(null);
+  try{
+   const {data,error}=await supabase.functions.invoke("diagnostico-pix-asaas",{body:{}});
+   if(error){const response=(error as {context?:Response}).context;const detail=response&&typeof response.json==="function"?await response.json().catch(()=>null):null;throw Error(detail?.details||detail?.error||message(error))}
+   if(data?.error)throw Error(data.details||data.error);
+   if(!data?.qr_code)throw Error("Asaas nao retornou o codigo Pix.");
+   setAsaasTestPix({qr_code:data.qr_code,qr_code_base64:data.qr_code_base64||null});
+   setAsaasTestMessage("Pix Asaas de R$ 29,90 gerado. Nenhum torneio criado e nenhuma gratuidade consumida. Nao pague antes de conferir.");
+  }catch(e){setAsaasTestMessage("Falha no Pix Asaas: "+message(e))}
+  finally{setAsaasTestBusy(false)}
+ }
+
  async function sortearChaves(categoryId: string) {
   if (!categoryId) { setError("Selecione uma categoria."); return; }
   if (!window.confirm("Confirmar o sorteio desta categoria? Ele não poderá ser repetido.")) return;
@@ -219,6 +236,13 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const active=list.find(t=>t.id===selected);
  return <main>
   <h1>Painel do organizador</h1>
+  <section className="card">
+   <h2>Teste de pagamento Asaas</h2>
+   <p className="muted">Gere um Pix real de R$ 29,90 para validar a integracao, sem criar campeonato nem consumir publicacoes gratuitas. Nao pague antes de conferir.</p>
+   <button type="button" className="secondary" disabled={asaasTestBusy} onClick={()=>void testAsaasPix()}>{asaasTestBusy?"Gerando Pix...":"Gerar Pix Asaas de R$ 29,90 para teste"}</button>
+   {asaasTestMessage&&<p role="status">{asaasTestMessage}</p>}
+   {asaasTestPix&&<div className="card"><h3>Pix de validacao — R$ 29,90</h3>{asaasTestPix.qr_code_base64&&<img alt="QR Code Pix Asaas" style={{maxWidth:240,width:"100%"}} src={`data:image/png;base64,${asaasTestPix.qr_code_base64}`}/>}<p>Pix copia e cola:</p><textarea readOnly rows={4} style={{width:"100%"}} value={asaasTestPix.qr_code}/><button type="button" onClick={()=>void navigator.clipboard.writeText(asaasTestPix.qr_code)}>Copiar Pix</button></div>}
+  </section>
   <div className="layout">
    <section>
     <h2>Novo campeonato</h2>
