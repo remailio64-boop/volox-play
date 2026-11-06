@@ -189,8 +189,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   let stopped=false;
   async function check(){
    if(!pix)return;
-   const {data,error}=await supabase.from("tournament_payments").select("status,tournament_id")
-    .eq("id",pix.payment_row_id).maybeSingle();
+   const {data,error}=await supabase.functions.invoke("consultar-pagamento-asaas",{body:{payment_row_id:pix.payment_row_id}});
    if(stopped)return;
    if(error){setPaymentStatus("Aguardando atualização do pagamento.");return;}
    if(data?.status==="approved"&&data.tournament_id){
@@ -251,14 +250,14 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const active=list.find(t=>t.id===selected);
  return <main>
   <h1>Painel do organizador</h1>
-  <section className="card">
+  {false&&<section className="card">
    <h2>Diagnóstico de pagamento</h2>
    <p className="muted">Teste técnico do Pix de R$ 29,90, sem publicar torneio e sem consumir gratuidade. Não pague nenhum código gerado neste teste.</p>
    <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void testPixConnection()}>{pixTestBusy?"Verificando...":"Testar conexão com Mercado Pago"}</button>
    <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void generateDiagnosticPix()}>Gerar Pix real de R$ 29,90 para teste</button>
    {pixTestResult&&<p role="status">{pixTestResult}</p>}
    {diagnosticPix&&<div className="card"><h3>Pix de validação — R$ 29,90</h3>{diagnosticPix.qr_code_base64&&<img alt="QR Code do Pix de validação" style={{maxWidth:240,width:"100%"}} src={`data:image/png;base64,${diagnosticPix.qr_code_base64}`}/>}<p>Pix copia e cola:</p><textarea readOnly rows={4} style={{width:"100%"}} value={diagnosticPix.qr_code}/><button type="button" onClick={()=>void navigator.clipboard.writeText(diagnosticPix.qr_code)}>Copiar Pix</button><p className="muted">Este Pix é real. Não pague antes de conferir. O teste não publica campeonatos.</p></div>}
-  </section>
+  </section>}
   <div className="layout">
    <section>
     <h2>Novo campeonato</h2>
