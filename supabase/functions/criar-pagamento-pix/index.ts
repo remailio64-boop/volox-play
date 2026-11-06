@@ -50,7 +50,7 @@ Deno.serve(async(req)=>{
    method:"POST",
    headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json",
     "X-Idempotency-Key":row.id},
-   body:JSON.stringify({transaction_amount:29.90,description:`Volox Play - ${name.slice(0,80)}`,
+   body:JSON.stringify({transaction_amount:29.90,description:`VoloxPlay - ${name.slice(0,80)}`,
      payment_method_id:"pix",payer:{email:user.email},external_reference:row.id})
   });
   const payment=await mp.json();

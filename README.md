@@ -1,4 +1,4 @@
-# Volox Play
+# VoloxPlay
 
 MVP online em React + TypeScript + Supabase.
 
