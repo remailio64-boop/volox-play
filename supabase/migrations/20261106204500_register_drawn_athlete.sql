@@ -20,6 +20,14 @@ begin
  if exists(select 1 from public.registrations where category_id=c.id and status<>'rejected'
  and lower(btrim(captain_email))=lower(btrim(p_email)))
  then raise exception 'Este e-mail ja esta inscrito nesta categoria'; end if;
+ -- Capacity represents individual athletes for drawn categories.
+ -- Require complete pairs/quartets to avoid impossible final team formation.
+ if c.capacity % (case when c.modality='areia_4x4' then 4 else 2 end) <> 0
+ then raise exception 'Capacidade da categoria deve permitir equipes completas'; end if;
+ if exists(select 1 from public.registrations where category_id=c.id and status<>'rejected'
+ and lower(btrim(captain_name))=lower(btrim(p_athlete_name))
+ and lower(btrim(captain_phone))=lower(btrim(p_phone)))
+ then raise exception 'Atleta ja inscrito nesta categoria'; end if;
  if (select count(*) from public.registrations where category_id=c.id and status<>'rejected')>=c.capacity
  then raise exception 'Vagas esgotadas'; end if;
  insert into public.registrations(tournament_id,category_id,team_name,captain_name,captain_email,captain_phone,athletes,payment_status)
