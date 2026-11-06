@@ -102,6 +102,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [pix,setPix]=useState<{payment_row_id:string;qr_code:string|null;qr_code_base64:string|null}|null>(null);
  const [paymentStatus,setPaymentStatus]=useState("");
  const [freeOrganizer,setFreeOrganizer]=useState(false);
+ const [trialRemaining,setTrialRemaining]=useState(0);
  async function sortearChaves(categoryId: string) {
   if (!categoryId) { setError("Selecione uma categoria."); return; }
   if (!window.confirm("Confirmar o sorteio desta categoria? Ele não poderá ser repetido.")) return;
@@ -146,7 +147,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   const {data,error}=await supabase.from("tournaments").select("*").eq("organizer_id",userId).order("created_at",{ascending:false});
   if(error)setError(error.message);else setList((data||[]) as Tournament[]);
  }
- useEffect(()=>{void load();supabase.rpc("is_free_organizer").then(({data,error})=>{if(!error)setFreeOrganizer(data===true);});},[userId]);
+ useEffect(()=>{void load();supabase.rpc("is_free_organizer").then(({data,error})=>{if(!error)setFreeOrganizer(data===true);});supabase.rpc("volox_trial_remaining").then(({data,error})=>{if(!error&&typeof data==="number")setTrialRemaining(data);});},[userId]);
  useEffect(()=>{
   if(!selected){setRegs([]);return;}
   supabase.from("registrations").select("*").eq("tournament_id",selected).order("created_at",{ascending:false})
@@ -183,10 +184,10 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     return {name:c.name.trim(),modality:c.modality,fee_cents,capacity};
    });
    if(name.trim().length<3||!categories.length)throw Error("Informe o campeonato e pelo menos uma categoria.");
-   if(freeOrganizer){
-    const {error:freeError}=await supabase.rpc("create_free_tournament",{p_name:name.trim(),p_categories:categories});
+   if(freeOrganizer||trialRemaining>0){
+    const {error:freeError}=await supabase.rpc("create_trial_tournament",{p_name:name.trim(),p_categories:categories});
     if(freeError)throw freeError;
-    setPaymentStatus("Torneio criado gratuitamente. Publique em Meus campeonatos.");
+    setPaymentStatus("Torneio criado. Publique em Meus campeonatos para utilizar uma publicação gratuita.");
     await load();
     return;
    }
@@ -224,7 +225,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     <h2>Novo campeonato</h2>
     <form className="card" onSubmit={create}>
      <label>Nome do campeonato<input required minLength={3} maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label>
-     <p className="muted">{freeOrganizer?"Arena Volox: publicação gratuita e ilimitada.":"R$ 29,90 uma única vez pelo campeonato. Categorias ilimitadas."}</p>
+     <p className="muted">{freeOrganizer?"Arena Volox: publicação gratuita e ilimitada.":trialRemaining>0?`Você tem ${trialRemaining} publicação(ões) gratuita(s) disponível(is). Depois, R$ 29,90 por torneio.`:"R$ 29,90 uma única vez pelo campeonato. Categorias ilimitadas."}</p>
      {cats.map((c,i)=><div className="card" key={i}>
       <h3>Categoria {i+1}</h3>
       <label>Nome da categoria<input required maxLength={60} value={c.name} onChange={e=>updateCat(i,"name",e.target.value)}/></label>
@@ -236,8 +237,8 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       {cats.length>1&&<button type="button" className="secondary" onClick={()=>setCats(prev=>prev.filter((_,j)=>j!==i))}>Remover categoria</button>}
      </div>)}
      <button type="button" className="secondary" onClick={()=>setCats(prev=>[...prev,{name:"",modality:"areia_2x2",fee:"120",capacity:"16"}])}>+ Adicionar categoria</button>
-     <p className="muted">{freeOrganizer?"Sua conta é isenta da taxa de publicação.":"A cobrança de R$ 29,90 é separada das inscrições das equipes."}</p>
-     <button disabled={busy||!!pix}>{busy?"Aguarde...":freeOrganizer?"Criar torneio gratuitamente":"Gerar PIX de R$ 29,90"}</button>
+     <p className="muted">{freeOrganizer?"Sua conta é isenta da taxa de publicação.":trialRemaining>0?"A gratuidade é consumida na primeira publicação, não na criação.":"A cobrança de R$ 29,90 é separada das inscrições das equipes."}</p>
+     <button disabled={busy||!!pix}>{busy?"Aguarde...":freeOrganizer||trialRemaining>0?"Criar torneio gratuitamente":"Gerar PIX de R$ 29,90"}</button>
     </form>
     {paymentStatus&&!pix&&<p role="status">{paymentStatus}</p>}
     {pix&&<div className="card">
@@ -256,7 +257,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
     {list.map(t=><div className="card" key={t.id}>
      <h3>{t.name}</h3>
      <p>{modalities[t.modality]} • {t.category} • {money(t.fee_cents)}</p>
-     <TournamentPublication tournament={t} onChanged={()=>void load()}/>
+     <TournamentPublication tournament={t} onChanged={()=>{void load();void supabase.rpc("volox_trial_remaining").then(({data,error})=>{if(!error&&typeof data==="number")setTrialRemaining(data);});}}/>
      {t.status==="open"?<p><Link to={`/t/${t.slug}`}>Página pública</Link></p>:<p className="muted">Publique o torneio para liberar o link aos atletas.</p>}
      <button className="secondary" onClick={()=>{setSelected(t.id);void carregarCategorias(t.id)}}>Inscrições e regulamento</button>
 <button
