@@ -30,15 +30,18 @@ Deno.serve(async(req)=>{
   for(const c of cats){
    const categoryName=String(c.name||"").trim();
    const modality=String(c.modality||"");
+   const registration_mode=String(c.registration_mode||"formed");
    const fee=Number(c.fee_cents);
    const capacity=Number(c.capacity);
    if(categoryName.length<1||categoryName.length>60||
       !["areia_2x2","areia_4x4","quadra_6x6","beach_tennis_duplas","beach_tennis_simples"].includes(modality)||
+      !["formed","drawn"].includes(registration_mode)||
+      (registration_mode==="drawn"&&!["areia_2x2","areia_4x4","beach_tennis_duplas"].includes(modality))||
       !Number.isSafeInteger(fee)||fee<0||!Number.isInteger(capacity)||capacity<2||capacity>512||
       seen.has(categoryName.toLocaleLowerCase("pt-BR")))
      return json({error:"Categoria invalida ou repetida"},400);
    seen.add(categoryName.toLocaleLowerCase("pt-BR"));
-   categories.push({name:categoryName,modality,fee_cents:fee,capacity});
+   categories.push({name:categoryName,modality,registration_mode,fee_cents:fee,capacity});
   }
   const {data:row,error:dbError}=await db.from("tournament_payments")
    .insert({organizer_id:user.id,amount_cents:2990,status:"pending",tournament_data:{name,categories}})
