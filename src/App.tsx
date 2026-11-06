@@ -103,6 +103,18 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const [paymentStatus,setPaymentStatus]=useState("");
  const [freeOrganizer,setFreeOrganizer]=useState(false);
  const [trialRemaining,setTrialRemaining]=useState(0);
+ const [pixTestBusy,setPixTestBusy]=useState(false);
+ const [pixTestResult,setPixTestResult]=useState("");
+ async function testPixConnection(){
+  setPixTestBusy(true);setPixTestResult("");
+  try{
+   const {data,error}=await supabase.functions.invoke("diagnostico-pix-volox",{body:{}});
+   if(error)throw error;
+   if(data?.error)throw Error(data.error);
+   setPixTestResult(data?.pix_generated?"PIX de teste gerado com sucesso. Nenhum torneio foi publicado e nenhuma gratuidade foi consumida.":"O Mercado Pago respondeu, mas não forneceu um código PIX. Situação: "+String(data?.status||"desconhecida"));
+  }catch(e){setPixTestResult("Falha no teste: "+message(e))}finally{setPixTestBusy(false)}
+ }
+
  async function sortearChaves(categoryId: string) {
   if (!categoryId) { setError("Selecione uma categoria."); return; }
   if (!window.confirm("Confirmar o sorteio desta categoria? Ele não poderá ser repetido.")) return;
@@ -220,6 +232,12 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
  const active=list.find(t=>t.id===selected);
  return <main>
   <h1>Painel do organizador</h1>
+  <section className="card">
+   <h2>Diagnóstico de pagamento</h2>
+   <p className="muted">Teste técnico do Pix de R$ 29,90, sem publicar torneio e sem consumir gratuidade. Não pague nenhum código gerado neste teste.</p>
+   <button type="button" className="secondary" disabled={pixTestBusy} onClick={()=>void testPixConnection()}>{pixTestBusy?"Verificando...":"Testar conexão com Mercado Pago"}</button>
+   {pixTestResult&&<p role="status">{pixTestResult}</p>}
+  </section>
   <div className="layout">
    <section>
     <h2>Novo campeonato</h2>
