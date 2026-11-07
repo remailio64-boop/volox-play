@@ -24,3 +24,16 @@ Execute `npm run dev`, `npm test` e `npm run build`. As migrações novas estão
 A cobrança de R$ 29,90 ao organizador é separada das inscrições dos atletas. Não marcar pagamentos como aprovados para contornar a cobrança. Os atletas pagam diretamente à organização; a confirmação manual só deve ser usada depois de verificar o crédito. A integração automática por organizador exige onboarding autorizado da conta do provedor e webhooks próprios.
 
 O link privado de acompanhamento contém um identificador de acesso e não deve ser divulgado publicamente. Os e-mails de confirmação e recuperação dependem da configuração, limites e entrega do Supabase Auth; a aplicação não deve afirmar que uma mensagem chegou sem verificar a caixa de entrada.
+
+
+## Contas e ranking dos atletas
+
+A versão de contas acrescenta `/atleta`, `/ranking` e `/atletas/:code`. A autenticação continua no Supabase Auth: atleta e organizador podem usar o mesmo acesso. `preferred_view` serve somente para navegação, nunca para autorizar dados.
+
+Cada perfil possui identidade estável por usuário, código compartilhável de 12 caracteres e exibição pública desligada por padrão. O capitão inscreve a equipe usando os códigos dos integrantes; os parceiros confirmam os convites em suas próprias contas. O histórico é consultado no banco, independentemente do aparelho. As inscrições antigas sem contas vinculadas continuam preservadas e não recebem vínculos automáticos por semelhança de nome.
+
+Os pontos por atleta são 100/70/50/30 para as quatro primeiras colocações e 10 para os demais participantes sorteados. O organizador precisa confirmar os pontos após finalizar as chaves, semifinais, final e terceiro lugar. A confirmação é idempotente. Alterações nos placares suspendem os pontos até nova confirmação; confrontos finais inconsistentes com as semifinais impedem a confirmação. O ranking público agrupa por modalidade e nome normalizado da categoria e respeita a opção de exibição pública e a publicação dos resultados. A conta guarda o histórico mesmo quando o atleta oculta seu perfil público.
+
+As inscrições individuais de categorias `drawn` também são vinculadas à conta. A atribuição de pontos das equipes sorteadas ainda depende da integração entre as equipes formadas e os resultados; por isso a confirmação de pontos dessas categorias fica bloqueada explicitamente nesta versão.
+
+`tests/athlete-ranking-db.sql` oferece um teste transacional completo com perfis, inscrições, convites, jogos e ranking. Execute `select pg_temp.test_athlete_rankings();` após carregar o arquivo em uma sessão de teste com a migração aplicada. Também aceita a migração inteira no argumento `p_setup` e a instala dentro do bloco desfeito ao final. Nenhum usuário, perfil ou torneio de teste é mantido. Os usuários simulados no banco não substituem um teste de cadastro e entrega de e-mail reais.

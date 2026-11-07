@@ -23,6 +23,18 @@
     {
       "source": "/minhas-inscricoes",
       "destination": "/index.html"
+    },
+    {
+      "source": "/atleta",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/ranking",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/atletas/:code",
+      "destination": "/index.html"
     }
   ],
   "headers": [
@@ -64,6 +76,15 @@
     },
     {
       "source": "/minhas-inscricoes",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/atleta",
       "headers": [
         {
           "key": "X-Robots-Tag",
