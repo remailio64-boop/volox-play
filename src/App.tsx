@@ -9,9 +9,11 @@ import { CompetitionRules, PublicHome, RulesPage, RulesEditor, PageMetadata, App
 import { modalities, teamSizes, type Modality, type Registration, type Tournament } from "./types";
 import { authMessage } from "./lib/authMessages";
 import { TournamentPublication } from "./TournamentPublication";
+import { AthleteAccount, AthleteTeamEntry, AthleteRankings, AthletePublicProfile, AthleteRankingPublication, AthleteRosterStatus } from "./Athletes";
+import { athleteReturn } from "./lib/athleteAccounts";
 import type { Session } from "@supabase/supabase-js";
 
-const message = (e:unknown) => e instanceof Error ? e.message : "Ocorreu um erro";
+const message = (e:unknown) => (e as {message?:string})?.message || "Ocorreu um erro";
 const money = (cents:number) => (cents/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 function App(){
  const [session,setSession]=useState<Session|null>(null); const [ready,setReady]=useState(false);
@@ -19,9 +21,15 @@ function App(){
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setReady(true)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{setSession(s);if(event==="PASSWORD_RECOVERY"){sessionStorage.setItem("volox-password-recovery","1");setRecovering(true)}});return ()=>subscription.unsubscribe()},[]);
  if(!ready) return <main>Carregando...</main>;
  if(recovering) return <ResetPassword session={session} onDone={()=>{sessionStorage.removeItem("volox-password-recovery");setRecovering(false)}}/>;
- return <><PageMetadata/><header><Link to="/" className="brand" aria-label="VoloxPlay"><span className="volox-logo-window" aria-hidden="true"><img src="/brand/volox-dark.jpeg" alt="" width="1170" height="647"/></span><span className="brand-play" aria-hidden="true">Play</span></Link><nav><Link to="/campeonatos">Campeonatos</Link><Link to="/regras">Regras</Link>{session?<><Link to="/painel">Meu painel</Link><button className="ghost" onClick={()=>supabase.auth.signOut()}>Sair</button></>:<Link to="/login">Organizador</Link>}</nav></header><Routes><Route path="/" element={<PublicHome/>}/><Route path="/campeonatos" element={<PublicHome/>}/><Route path="/favoritos" element={<PublicHome favoritesOnly/>}/><Route path="/minhas-inscricoes" element={<MyRegistrations/>}/><Route path="/regras" element={<RulesPage/>}/><Route path="/login" element={session?<Navigate to="/painel"/>:<Login/>}/><Route path="/painel" element={session?<Dashboard userId={session.user.id}/>:<Navigate to="/login"/>}/><Route path="/t/:slug" element={<PublicTournament/>}/><Route path="/inscricao/:id" element={<RegistrationStatus/>}/><Route path="*" element={<main>Página não encontrada. <Link to="/">Voltar</Link></main>}/></Routes></>;
+ return <><PageMetadata/><header><Link to="/" className="brand" aria-label="VoloxPlay"><span className="volox-logo-window" aria-hidden="true"><img src="/brand/volox-dark.jpeg" alt="" width="1170" height="647"/></span><span className="brand-play" aria-hidden="true">Play</span></Link><nav><Link to="/campeonatos">Campeonatos</Link><Link to="/ranking">Ranking</Link><Link to="/atleta">Atleta</Link><Link to="/regras">Regras</Link>{session?<><Link to="/painel">Meu painel</Link><button className="ghost" onClick={()=>supabase.auth.signOut()}>Sair</button></>:<Link to="/login">Organizador</Link>}</nav></header><Routes><Route path="/" element={<PublicHome/>}/><Route path="/campeonatos" element={<PublicHome/>}/><Route path="/favoritos" element={<PublicHome favoritesOnly/>}/><Route path="/minhas-inscricoes" element={<MyRegistrations/>}/><Route path="/regras" element={<RulesPage/>}/><Route path="/login" element={<LoginRoute session={session}/>}/><Route path="/atleta" element={<AthleteAccount key={session?.user.id||"guest"} session={session}/>}/><Route path="/ranking" element={<AthleteRankings/>}/><Route path="/atletas/:code" element={<AthletePublicProfile/>}/><Route path="/painel" element={session?<Dashboard userId={session.user.id}/>:<Navigate to="/login"/>}/><Route path="/t/:slug" element={<PublicTournament session={session}/>}/><Route path="/inscricao/:id" element={<RegistrationStatus/>}/><Route path="*" element={<main>Página não encontrada. <Link to="/">Voltar</Link></main>}/></Routes></>;
 }
-function Login(){
+function LoginRoute({session}:{session:Session|null}){
+ const [params]=useSearchParams();
+ const athleteMode=params.get("perfil")==="atleta"||(!params.get("perfil")&&session?.user.user_metadata?.preferred_view==="athlete");
+ const destination=athleteMode?athleteReturn(params.get("retorno")):"/painel";
+ return session?<Navigate to={destination} replace/>:<Login athleteMode={!!athleteMode}/>;
+}
+function Login({athleteMode=false}:{athleteMode?:boolean}){
  const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [mode,setMode]=useState<"login"|"signup"|"reset">("login");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
  function changeMode(next:typeof mode){setMode(next);setInfo("");setPassword("")}
  async function submit(e:FormEvent){
@@ -32,7 +40,7 @@ function Login(){
     if(error)throw error;
     setInfo("Se houver uma conta com esse e-mail, você receberá um link para criar uma nova senha. Confira também a pasta de spam.");
    }else{
-    const {error}=mode==="signup"?await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:`${window.location.origin}/login`}}):await supabase.auth.signInWithPassword({email:email.trim(),password});
+    const {error}=mode==="signup"?await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:`${window.location.origin}/login`,data:{preferred_view:athleteMode?"athlete":"organizer"}}}):await supabase.auth.signInWithPassword({email:email.trim(),password});
     if(error)throw error;
     if(mode==="signup")setInfo("Solicitação de cadastro enviada. Se for necessária a confirmação do e-mail, confira sua caixa de entrada e a pasta de spam antes de entrar.");
    }
@@ -47,7 +55,7 @@ function Login(){
    setInfo("Se houver um cadastro aguardando confirmação, um novo e-mail será enviado. Confira também a pasta de spam.");
   }catch(e){setInfo(authMessage(e))}finally{setBusy(false)}
  }
- return <main className="narrow"><h1>{mode==="login"?"Acesso do organizador":mode==="signup"?"Criar conta":"Recuperar senha"}</h1><form onSubmit={submit} className="card"><label>E-mail<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>{mode!=="reset"&&<label>Senha<input type="password" autoComplete={mode==="signup"?"new-password":"current-password"} minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy}>{busy?"Aguarde...":mode==="login"?"Entrar":mode==="signup"?"Criar conta":"Enviar link de recuperação"}</button>{info&&<p role="status">{info}</p>}</form>{mode==="login"&&<button className="linklike" disabled={busy} onClick={()=>changeMode("reset")}>Esqueci minha senha</button>}{mode!=="reset"&&<button type="button" className="linklike" disabled={busy} onClick={()=>void resendConfirmation()}>Reenviar confirmação de e-mail</button>}<button className="linklike" disabled={busy} onClick={()=>changeMode(mode==="login"?"signup":"login")}>{mode==="login"?"Ainda não tenho conta":"Voltar para entrar"}</button></main>
+ return <main className="narrow"><h1>{mode==="login"?(athleteMode?"Acesso do atleta":"Acesso do organizador"):mode==="signup"?"Criar conta":"Recuperar senha"}</h1><form onSubmit={submit} className="card"><label>E-mail<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>{mode!=="reset"&&<label>Senha<input type="password" autoComplete={mode==="signup"?"new-password":"current-password"} minLength={6} required value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy}>{busy?"Aguarde...":mode==="login"?"Entrar":mode==="signup"?"Criar conta":"Enviar link de recuperação"}</button>{info&&<p role="status">{info}</p>}</form>{mode==="login"&&<button className="linklike" disabled={busy} onClick={()=>changeMode("reset")}>Esqueci minha senha</button>}{mode!=="reset"&&<button type="button" className="linklike" disabled={busy} onClick={()=>void resendConfirmation()}>Reenviar confirmação de e-mail</button>}<button className="linklike" disabled={busy} onClick={()=>changeMode(mode==="login"?"signup":"login")}>{mode==="login"?"Ainda não tenho conta":"Voltar para entrar"}</button></main>
 }
 function ResetPassword({session,onDone}:{session:Session|null;onDone:()=>void}){
  const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [busy,setBusy]=useState(false);const [info,setInfo]=useState("");
@@ -59,7 +67,7 @@ function ResetPassword({session,onDone}:{session:Session|null;onDone:()=>void}){
   try{
    const {error}=await supabase.auth.updateUser({password});
    if(error)throw error;
-   navigate("/painel",{replace:true});onDone();
+   navigate(session?.user.user_metadata?.preferred_view==="athlete"?"/atleta":"/painel",{replace:true});onDone();
   }catch(e){setInfo(message(e))}finally{setBusy(false)}
  }
  if(!session)return <main className="narrow"><h1>Recuperar senha</h1><p>O link expirou ou é inválido. Solicite um novo link na tela de acesso.</p><button onClick={()=>{navigate("/login",{replace:true});onDone()}}>Voltar para entrar</button></main>;
@@ -376,14 +384,15 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
 )}
    {drawCategoryId && <JogosPanel categoryId={drawCategoryId}/>}
    {drawCategoryId && <EliminatoriasPanel categoryId={drawCategoryId}/>}
-   {drawCategoryId && <PublicacaoResultados categoryId={drawCategoryId}/>} 
+   {drawCategoryId && <PublicacaoResultados categoryId={drawCategoryId}/>}
+   {drawCategoryId && <AthleteRankingPublication categoryId={drawCategoryId}/>}
    <p className="muted">As inscrições pagas são recebidas diretamente pela organização. Confira o recebimento antes de confirmar o pagamento. A confirmação aqui é manual e não consulta o banco.</p>
    {regs.length===0?<p>Nenhuma inscrição ainda.</p>:<div className="table-wrap"><table>
     <thead><tr><th>Equipe</th><th>Responsável</th><th>Atletas</th><th>Pagamento</th><th>Situação</th><th>Ações</th></tr></thead>
     <tbody>{regs.map(r=><tr key={r.id}>
      <td>{r.team_name}</td>
      <td>{r.captain_name}<br/><small>{r.captain_email}</small><br/><small>{r.captain_phone}</small></td>
-     <td>{r.athletes.join(", ")}</td>
+     <td>{r.athletes.join(", ")}<AthleteRosterStatus registrationId={r.id}/></td>
      <td>{r.payment_status==="not_required"?"Gratuita":r.payment_status==="paid"?"Recebimento confirmado":"Aguardando confirmação"}{r.payment_confirmed_at&&<small style={{display:"block"}}>Confirmado manualmente em {new Date(r.payment_confirmed_at).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})}</small>}</td>
      <td>{r.status==="approved"?"Aprovada":r.status==="rejected"?"Rejeitada":"Aguardando aprovação"}</td>
      <td>{r.payment_status!=="paid"&&r.payment_status!=="not_required"&&r.status!=="rejected"&&<button disabled={busy} onClick={()=>void confirmPayment(r)}>Confirmar recebimento</button>}<button disabled={busy||r.status==="approved"||(r.payment_status!=="not_required"&&r.payment_status!=="paid")}
@@ -461,7 +470,7 @@ function JogosPanel({categoryId}:{categoryId:string}){
   try{
    const {error}=await supabase.rpc("volox_salvar_placar",{p_match_id:m.id,p_scores:parsed});
    if(error)throw error;
-   setEditing(null);await refresh();setInfo("Placar salvo e classificação atualizada.");
+   setEditing(null);await refresh();window.dispatchEvent(new CustomEvent("volox-scores-updated",{detail:categoryId}));setInfo("Placar salvo e classificação atualizada.");
   }catch(e){setErr(message(e))}finally{setBusy(false)}
  }
  const groups=Array.from(new Set(matches.map(m=>m.group_name))).sort();
@@ -580,7 +589,7 @@ function EliminatoriasPanel({categoryId}:{categoryId:string}){
   try{
    const {error}=await supabase.rpc("volox_salvar_eliminatoria",{p_match_id:m.id,p_scores:parsed});
    if(error)throw error;
-   setEditing(null);await refresh();setInfo("Resultado salvo.");
+   setEditing(null);await refresh();window.dispatchEvent(new CustomEvent("volox-scores-updated",{detail:categoryId}));setInfo("Resultado salvo.");
   }catch(e){setErr(message(e))}finally{setBusy(false)}
  }
  const hasSemi=matches.some(m=>m.phase==="semi1");
@@ -769,14 +778,13 @@ function ResultadosPublicos({categoryId,modality}:{categoryId:string;modality?:M
  </section>;
 }
 
-function PublicTournament(){
+function PublicTournament({session}:{session:Session|null}){
  const {slug}=useParams();const [params,setParams]=useSearchParams();
  type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string;best_of:number|null;registration_mode:"formed"|"drawn"};
  const [t,setT]=useState<Tournament|null>(null);const [cats,setCats]=useState<PublicCat[]>([]);const [catId,setCatId]=useState("");
- const [err,setErr]=useState("");const [loading,setLoading]=useState(true);const [team,setTeam]=useState("");const [captain,setCaptain]=useState("");
- const [email,setEmail]=useState("");const [phone,setPhone]=useState("");const [athletes,setAthletes]=useState<string[]>([]);const [submitting,setSubmitting]=useState(false);
+ const [err,setErr]=useState("");const [loading,setLoading]=useState(true);
  const [favorites,setFavorites]=useState(readFavorites);const [storageNotice,setStorageNotice]=useState("");
- const navigate=useNavigate();const requestedTab=params.get("aba")||"informacoes";const tab=["informacoes","categorias","regulamento","resultados","inscricao"].includes(requestedTab)?requestedTab:"informacoes";
+ const requestedTab=params.get("aba")||"informacoes";const tab=["informacoes","categorias","regulamento","resultados","inscricao"].includes(requestedTab)?requestedTab:"informacoes";
  useEffect(()=>{
   let cancelled=false;
   async function load(){
@@ -797,22 +805,7 @@ function PublicTournament(){
  },[slug]);
  useEffect(()=>{if(t){document.title=`${t.name} | VoloxPlay`;document.querySelector('meta[property="og:title"]')?.setAttribute("content",document.title)}},[t]);
  const selected=cats.find(c=>c.id===catId);const modality=selected?.modality||t?.modality;const fee=selected?.fee_cents??t?.fee_cents??0;const drawn=selected?.registration_mode==="drawn";
- const count=drawn?1:modality?teamSizes[modality]:0;
- useEffect(()=>{if(count)setAthletes(Array(count).fill(""))},[catId,count]);
  function showTab(next:string,category?:string){const updated=new URLSearchParams(params);updated.set("aba",next);if(category){setCatId(category);updated.set("categoria",category)}setParams(updated)}
- async function submit(e:FormEvent){
-  e.preventDefault();if(!t)return;setErr("");setSubmitting(true);
-  try{
-   if(!eventState(t).accepting||selected&&selected.status!=="open")throw Error("As inscrições desta categoria estão encerradas.");
-   if(athletes.some(x=>!x.trim()))throw Error("Informe todos os atletas titulares.");
-
-   const {data,error}=drawn
-    ?await supabase.rpc("register_drawn_athlete",{p_tournament_id:t.id,p_category_id:catId,p_athlete_name:athletes[0].trim(),p_email:email.trim(),p_phone:phone.trim()})
-    :await supabase.rpc("register_team_by_category",{p_tournament_id:t.id,p_category_id:cats.length?catId:null,p_team_name:team.trim(),p_captain_name:captain.trim(),p_captain_email:email.trim(),p_captain_phone:phone.trim(),p_athletes:athletes.map(x=>x.trim())});
-   if(error)throw error;if(!data)throw Error("Não foi possível criar a inscrição.");
-   rememberRegistration({id:data,tournament:t.name,category:selected?.name});navigate(`/inscricao/${data}`);
-  }catch(e){setErr(message(e))}finally{setSubmitting(false)}
- }
  if(loading)return <AppScaffold><p role="status">Carregando torneio...</p></AppScaffold>;
  if(!t)return <AppScaffold><div className="app-empty"><Trophy size={35}/><h1>Torneio indisponível</h1><p>{err}</p><Link className="button" to="/campeonatos">Explorar torneios</Link></div></AppScaffold>;
  const state=eventState(t);const canRegister=state.accepting&&(!cats.length||cats.some(c=>c.status==="open"));const saved=favorites.includes(t.id);
@@ -827,7 +820,7 @@ function PublicTournament(){
   {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição individual, por dupla ou por equipe.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null}]).map(c=>{const available=state.accepting&&c.status==="open";return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {teamSizes[c.modality]} {teamSizes[c.modality]===1?"atleta":"atletas"} por equipe</p><p className="muted">Limite de {c.capacity} equipes · {c.best_of?formatLabel(c.modality,c.best_of):"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por equipe</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?"Inscrever minha equipe":"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
   {tab==="regulamento"&&<div className="card">{cats.length>0&&picker}<CompetitionRules text={t.competition_rules||""} modality={modality} bestOf={selected?.best_of}/></div>}
   {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}<ResultadosPublicos categoryId={catId} modality={modality}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
-  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><span className="app-eyebrow">ENTRE PARA A DISPUTA</span><h2>Inscreva sua equipe</h2><p>Preencha os dados dos atletas. Você não precisa criar uma conta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por equipe</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<>{fee>0&&t.payment_instructions&&<div className="written-rules"><h3>Pagamento à organização</h3><p>{t.payment_instructions}</p></div>}{fee>0&&<p className="notice">O pagamento é feito diretamente à organização, fora do aplicativo. Sua inscrição ficará aguardando a conferência manual do recebimento e a aprovação da organização. Não há débito automático.</p>}<form onSubmit={submit}>{!drawn&&<><div className="form-section-label">01 · SUA EQUIPE</div><label>Nome do atleta / dupla / equipe<input required minLength={2} maxLength={100} value={team} onChange={e=>setTeam(e.target.value)}/></label></>}<div className="form-section-label">02 · CONTATO</div>{!drawn&&<label>Nome do responsável<input required minLength={2} maxLength={100} value={captain} onChange={e=>setCaptain(e.target.value)}/></label>}<div className="editor-grid"><label>E-mail<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label><label>WhatsApp<input required type="tel" minLength={8} maxLength={25} value={phone} onChange={e=>setPhone(e.target.value)}/></label></div><div className="form-section-label">03 · {drawn?"INSCRIÇÃO INDIVIDUAL":"ATLETAS TITULARES"} ({count})</div><div className="editor-grid">{athletes.map((a,i)=><label key={i}>Atleta {i+1}<input required minLength={2} maxLength={100} value={a} onChange={e=>setAthletes(prev=>prev.map((x,j)=>i===j?e.target.value:x))}/></label>)}</div><p className="muted">Os dados de contato são usados para administrar a inscrição e não serão exibidos publicamente. Consulte o <button type="button" className="inline-link" onClick={()=>showTab("regulamento")}>regulamento da competição</button>.</p><button disabled={submitting||!!(cats.length&&!catId)}>{submitting?"Enviando...":"Enviar inscrição"}<ChevronRight size={17}/></button>{err&&<p className="error" role="alert">{err}</p>}</form></>}</section>}
+  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><h2>{drawn?"Inscrição individual":"Inscreva sua equipe"}</h2><p>Vincule sua participação à sua conta de atleta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por {drawn?"atleta":"equipe"}</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<AthleteTeamEntry key={`${t.id}-${catId}-${session?.user.id||"guest"}`} session={session} tournament={t} categoryId={cats.length?catId:null} categoryName={selected?.name||t.category} modality={modality!} fee={fee} drawn={drawn}/>}</section>}
  </AppScaffold>;
 }
 function RegistrationStatus(){

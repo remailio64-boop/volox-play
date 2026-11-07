@@ -33,3 +33,10 @@ assert.match(authMessage({code:'email_not_confirmed'}),/Confirme seu e-mail/);
 assert.match(authMessage({code:'invalid_credentials'}),/incorretos/);
 assert.match(authMessage({code:'over_email_send_rate_limit'}),/limite/);
 console.log(`${cases.length+9} regression checks passed (scoring, deadlines, ranking, auth errors)`);
+
+const {athleteReturn,normalizeAthleteCode}=await load('../src/lib/athleteAccounts.ts');
+for(const value of [null,'https://example.com','//example.com','/painel','/atleta\\example.com','javascript:alert(1)'])assert.equal(athleteReturn(value),'/atleta');
+assert.equal(athleteReturn('/t/copa?aba=inscricao'),'/t/copa?aba=inscricao');
+assert.equal(athleteReturn('/atleta?retorno=inscricao'),'/atleta?retorno=inscricao');
+assert.equal(normalizeAthleteCode(' A1b2C3d4E5f6 '),'a1b2c3d4e5f6');
+console.log('9 athlete identity and safe return checks passed');
