@@ -34,6 +34,15 @@ Cada perfil possui identidade estável por usuário, código compartilhável de 
 
 Os pontos por atleta são 100/70/50/30 para as quatro primeiras colocações e 10 para os demais participantes sorteados. O organizador precisa confirmar os pontos após finalizar as chaves, semifinais, final e terceiro lugar. A confirmação é idempotente. Alterações nos placares suspendem os pontos até nova confirmação; confrontos finais inconsistentes com as semifinais impedem a confirmação. O ranking público agrupa por modalidade e nome normalizado da categoria e respeita a opção de exibição pública e a publicação dos resultados. A conta guarda o histórico mesmo quando o atleta oculta seu perfil público.
 
-As inscrições individuais de categorias `drawn` também são vinculadas à conta. A atribuição de pontos das equipes sorteadas ainda depende da integração entre as equipes formadas e os resultados; por isso a confirmação de pontos dessas categorias fica bloqueada explicitamente nesta versão.
+As inscrições individuais de categorias `drawn` também são vinculadas à conta. As duplas e os quartetos são formados aleatoriamente a partir dos atletas aprovados e seguem para o sorteio das chaves. Os pontos da equipe são atribuídos individualmente aos integrantes, e o histórico da conta mostra uma única participação, sem duplicar o cadastro individual e a equipe gerada.
 
 `tests/athlete-ranking-db.sql` oferece um teste transacional completo com perfis, inscrições, convites, jogos e ranking. Execute `select pg_temp.test_athlete_rankings();` após carregar o arquivo em uma sessão de teste com a migração aplicada. Também aceita a migração inteira no argumento `p_setup` e a instala dentro do bloco desfeito ao final. Nenhum usuário, perfil ou torneio de teste é mantido. Os usuários simulados no banco não substituem um teste de cadastro e entrega de e-mail reais.
+
+
+## Equipes sorteadas e fechamento desta versão
+
+A migração `20261107235915_complete_drawn_competitions.sql` distingue inscrições individuais pagáveis (`individual`) e equipes geradas para a competição (`drawn_team`). O sorteio é único por categoria, usa somente atletas aprovados e exige quantidade múltipla de 2 ou 4, com pelo menos quatro equipes completas. A formação da equipe não cria cobrança nem transforma uma inscrição pendente em paga. Após formar as equipes, novas inscrições e alterações de situação dos participantes ficam bloqueadas. O organizador confere os integrantes e realiza o sorteio das chaves separadamente.
+
+Novos sorteios de chaves usam duas chaves equilibradas com no mínimo duas equipes em cada uma, permitindo semifinais, final e terceiro lugar inclusive com quatro ou nove equipes. Sorteios já existentes são preservados. As consultas públicas de equipes ocultam os nomes de perfis reservados; o próprio atleta vê seus parceiros quando conectado e o organizador vê a composição completa.
+
+O recebimento das inscrições continua **manual por decisão da usuária**: pagamento direto à organização, conferência do crédito e registro no aplicativo. A taxa de uso do aplicativo pelo organizador é um fluxo separado. A entrega de um e-mail de cadastro real precisa ser confirmada pelo destinatário; testes simulados no banco não comprovam essa entrega.

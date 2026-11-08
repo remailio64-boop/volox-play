@@ -41,3 +41,5 @@ header,body:has(.app-layout)>#root>header{background:#424242;padding-top:11px;pa
 @media(max-width:600px){.athlete-history{display:block}.athlete-history>div:last-child{margin-top:20px}.athlete-summary{gap:10px}.athlete-summary>div{padding:16px}.athlete-summary strong{font-size:29px}.athlete-summary span{font-size:11px}.athlete-code strong{font-size:20px}}
 
 .athlete-roster-status small{display:block;line-height:1.7;margin-top:4px}.athlete-roster-status button{font-size:11px;padding:5px 0}
+
+.drawn-teams-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.drawn-team h4{margin:12px 0}.drawn-team li{font-size:13px;line-height:1.9}.my-drawn-team{border-color:#6c9d71!important;background:#f3f8ef!important}.drawn-teams-panel{margin:25px 0}
