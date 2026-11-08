@@ -48,3 +48,11 @@ Novos sorteios de chaves usam duas chaves equilibradas com no mínimo duas equip
 O recebimento das inscrições continua **manual por decisão da usuária**: pagamento direto à organização, conferência do crédito e registro no aplicativo. A taxa de uso do aplicativo pelo organizador é um fluxo separado. A entrega de um e-mail de cadastro real precisa ser confirmada pelo destinatário; testes simulados no banco não comprovam essa entrega.
 
 `tests/partner-search-db.sql` valida busca com acentos/cidade, privacidade, revogação de consentimento, limite de resultados e confirmação de convites. Todas as contas e inscrições simuladas são desfeitas ao final.
+
+### Convites e acompanhamento da equipe
+
+O formulário mostra categoria, integrantes selecionados e valor total antes do envio. Após a inscrição, o resumo autenticado mostra os nomes, confirmações e pagamento; responsável, integrantes e organizador podem consultar, sem expor contatos ou IDs de contas. O acesso pelo link privado antigo continua limitado ao DTO anterior para visitantes sem conta.
+
+O botão **Avisar parceiros pelo WhatsApp** abre uma mensagem pronta para envio manual. Compartilha apenas o caminho `/atleta`, nunca o link privado de acompanhamento da inscrição. O app não envia mensagens automaticamente. Convites pendentes aparecem no menu, atualizados ao navegar, voltar ao app e responder um convite; não há notificações push.
+
+O painel do organizador inclui contagens e filtros de aprovação e pagamento. `tests/team-summary-db.sql` valida permissões e estados com fixtures inteiramente desfeitas; a suíte JavaScript também verifica que o texto compartilhado não contém links privados de inscrição.
