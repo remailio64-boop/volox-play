@@ -44,3 +44,12 @@ console.log('9 athlete identity and safe return checks passed');
 const {registrationUnit}=await load('../src/lib/registration.ts');
 for(const [modality,mode,expected] of [['areia_2x2','formed','equipe'],['areia_4x4','drawn','atleta'],['beach_tennis_simples','formed','atleta'],['beach_tennis_duplas','formed','equipe'],['beach_tennis_duplas','drawn','atleta'],['quadra_6x6','formed','equipe']])assert.equal(registrationUnit(modality,mode),expected);
 console.log('6 registration price-unit checks passed');
+
+const {inviteShareText}=await load('../src/lib/inviteSharing.ts');
+const invite=inviteShareText('https://volox-play.vercel.app/inscricao/PRIVATE-ID?token=PRIVATE','Dupla A & B','Copa Teste');
+assert.match(invite,/https:\/\/volox-play\.vercel\.app\/atleta/);
+assert.doesNotMatch(invite,/PRIVATE|token=|\/inscricao\//);
+assert.match(invite,/Dupla A & B/);
+assert.match(invite,/Copa Teste/);
+assert.match(invite,/separada do pagamento/);
+console.log('5 invitation sharing and private-link checks passed');
