@@ -43,3 +43,11 @@ header,body:has(.app-layout)>#root>header{background:#424242;padding-top:11px;pa
 .athlete-roster-status small{display:block;line-height:1.7;margin-top:4px}.athlete-roster-status button{font-size:11px;padding:5px 0}
 
 .drawn-teams-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.drawn-team h4{margin:12px 0}.drawn-team li{font-size:13px;line-height:1.9}.my-drawn-team{border-color:#6c9d71!important;background:#f3f8ef!important}.drawn-teams-panel{margin:25px 0}
+.partner-picker{border:1px solid #dbe5e9;border-radius:12px;padding:16px;margin:16px 0;min-width:0}
+.partner-picker h4{margin:0 0 12px}
+.selected-athlete{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;background:#f0f6ef;border-radius:10px;padding:14px;margin:12px 0;overflow-wrap:anywhere}
+.selected-athlete span{color:#526879}
+.partner-results{list-style:none;padding:0;margin:12px 0}
+.partner-results li{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 0;border-bottom:1px solid #e1e8eb}
+.partner-results li div{min-width:0;overflow-wrap:anywhere}
+.partner-results small{display:block;color:#526879;margin-top:4px}
