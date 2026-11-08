@@ -10,6 +10,8 @@ import { modalities, teamSizes, type Modality, type Registration, type Tournamen
 import { authMessage } from "./lib/authMessages";
 import { TournamentPublication } from "./TournamentPublication";
 import { AthleteAccount, AthleteTeamEntry, AthleteRankings, AthletePublicProfile, AthleteRankingPublication, AthleteRosterStatus } from "./Athletes";
+import { registrationUnit } from "./lib/registration";
+import { DrawnTeamsPanel } from "./DrawnTeams";
 import { athleteReturn } from "./lib/athleteAccounts";
 import type { Session } from "@supabase/supabase-js";
 
@@ -77,8 +79,9 @@ function Dashboard({userId}:{userId:string}){
  type Cat={name:string;modality:Modality;registration_mode:"formed"|"drawn";fee:string;capacity:string};
  const [list,setList]=useState<Tournament[]>([]);
  const [selected,setSelected]=useState<string|null>(null);
-const [drawCategories,setDrawCategories]=useState<{id:string;name:string}[]>([]);
+const [drawCategories,setDrawCategories]=useState<{id:string;name:string;modality:Modality;registration_mode:"formed"|"drawn";registrations_closed:boolean}[]>([]);
 const [drawCategoryId,setDrawCategoryId]=useState("");
+ const [drawnCount,setDrawnCount]=useState(0);
  const [drawLoading,setDrawLoading]=useState(false);
  const [drawResult,setDrawResult]=useState("");
  type DrawGroup={group_name:string;teams:string[]};
@@ -137,7 +140,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   try {
    const { data, error } = await supabase.rpc("sortear_chaves", { p_category_id: categoryId });
    if (error) throw error;
-   setDrawResult("Sorteio registrado. Confira as chaves abaixo.");
+   setDrawResult("Sorteio registrado. Confira as chaves abaixo.");setDrawCategories(prev=>prev.map(c=>c.id===categoryId?{...c,registrations_closed:true}:c));
    await carregarChaves(categoryId);
   } catch (err) {
    setError(message(err));
@@ -152,7 +155,9 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   try {
    const { data, error } = await supabase.rpc("draw_category_teams", { p_category_id: categoryId });
    if (error) throw error;
-   setDrawResult(`Equipes sorteadas: ${data}. O sorteio de chaves é uma etapa separada.`);
+   setDrawResult(`Equipes sorteadas: ${data}. Confira os integrantes abaixo e depois confirme o sorteio das chaves.`);
+   setDrawnCount(Number(data)||0);setDrawCategories(prev=>prev.map(c=>c.id===categoryId?{...c,registrations_closed:true}:c));window.dispatchEvent(new CustomEvent("volox-teams-updated",{detail:categoryId}));
+   if(selected){const result=await supabase.from("registrations").select("*").eq("tournament_id",selected).order("created_at",{ascending:false});if(!result.error)setRegs((result.data||[]) as Registration[])}
   } catch (err) { setError(message(err)); }
   finally { setBusy(false); }
  }
@@ -163,10 +168,10 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   setDrawReadError("");
   setDrawLoading(true);
   setDrawCategories([]);
-  setDrawCategoryId("");
+  setDrawCategoryId("");setDrawnCount(0);
   try {
    const { data, error } = await supabase.from("tournament_categories")
-    .select("id,name").eq("tournament_id", tournamentId).order("created_at");
+    .select("id,name,modality,registration_mode,registrations_closed").eq("tournament_id", tournamentId).order("created_at");
    if (error) throw error;
    setDrawCategories(data || []);
    if (data?.length) {
@@ -258,6 +263,8 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
   }catch(e){setError(message(e))}finally{setBusy(false)}
  }
  const active=list.find(t=>t.id===selected);
+ const selectedCategory=drawCategories.find(c=>c.id===drawCategoryId);
+ const drawnCategory=selectedCategory?.registration_mode==="drawn";
  return <main>
   <h1>Painel do organizador</h1>
   <section className="card">
@@ -335,7 +342,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       <select
         value={drawCategoryId}
         onChange={e => {
-          setDrawCategoryId(e.target.value);
+          setDrawCategoryId(e.target.value);setDrawnCount(0);
           setDrawResult("");
           void carregarChaves(e.target.value);
         }}
@@ -348,14 +355,14 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       </select>
     </label>
 
-    <button type="button" disabled={busy || !drawCategoryId}
+    {drawnCategory&&<><p className="muted">Serão usados somente os atletas aprovados. São necessários pelo menos {teamSizes[selectedCategory!.modality]*4} atletas, em quantidade múltipla de {teamSizes[selectedCategory!.modality]}, para formar quatro ou mais equipes completas.</p><button type="button" disabled={busy || !drawCategoryId || drawnCount>0}
       onClick={() => void sortearEquipes(drawCategoryId)}>
-      {busy ? "Aguarde..." : "Sortear duplas ou quartetos"}
-    </button>
+      {busy ? "Aguarde..." : drawnCount>0?"Equipes já sorteadas":"Sortear duplas ou quartetos"}
+    </button><DrawnTeamsPanel categoryId={drawCategoryId} onCount={setDrawnCount}/></>}
     {drawResult && <p role="status">{drawResult}</p>}
     <h4>Sorteio das chaves</h4>
     <p className="muted">
-      O sorteio utilizará somente equipes aprovadas. São necessárias pelo menos 3 equipes aprovadas.
+      O sorteio utilizará somente equipes aprovadas. São necessárias pelo menos 4 equipes aprovadas. Serão formadas duas chaves equilibradas, com duas classificadas de cada uma.
     </p>
     {drawReadLoading && <p>Consultando chaves...</p>}
     {drawReadError && <p className="error" role="alert">{drawReadError}</p>}
@@ -373,7 +380,7 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
       </>
     ) : (
       !drawReadLoading && !drawReadError && (
-        <button type="button" disabled={busy || !drawCategoryId}
+        <button type="button" disabled={busy || !drawCategoryId || (drawnCategory&&drawnCount===0)}
           onClick={() => void sortearChaves(drawCategoryId)}>
           {busy ? "Aguarde..." : "Confirmar sorteio da categoria"}
         </button>
@@ -389,15 +396,15 @@ const [drawCategoryId,setDrawCategoryId]=useState("");
    <p className="muted">As inscrições pagas são recebidas diretamente pela organização. Confira o recebimento antes de confirmar o pagamento. A confirmação aqui é manual e não consulta o banco.</p>
    {regs.length===0?<p>Nenhuma inscrição ainda.</p>:<div className="table-wrap"><table>
     <thead><tr><th>Equipe</th><th>Responsável</th><th>Atletas</th><th>Pagamento</th><th>Situação</th><th>Ações</th></tr></thead>
-    <tbody>{regs.map(r=><tr key={r.id}>
+    <tbody>{regs.filter(r=>r.entry_kind!=="drawn_team").map(r=><tr key={r.id}>
      <td>{r.team_name}</td>
      <td>{r.captain_name}<br/><small>{r.captain_email}</small><br/><small>{r.captain_phone}</small></td>
      <td>{r.athletes.join(", ")}<AthleteRosterStatus registrationId={r.id}/></td>
      <td>{r.payment_status==="not_required"?"Gratuita":r.payment_status==="paid"?"Recebimento confirmado":"Aguardando confirmação"}{r.payment_confirmed_at&&<small style={{display:"block"}}>Confirmado manualmente em {new Date(r.payment_confirmed_at).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})}</small>}</td>
      <td>{r.status==="approved"?"Aprovada":r.status==="rejected"?"Rejeitada":"Aguardando aprovação"}</td>
-     <td>{r.payment_status!=="paid"&&r.payment_status!=="not_required"&&r.status!=="rejected"&&<button disabled={busy} onClick={()=>void confirmPayment(r)}>Confirmar recebimento</button>}<button disabled={busy||r.status==="approved"||(r.payment_status!=="not_required"&&r.payment_status!=="paid")}
+     <td>{r.payment_status!=="paid"&&r.payment_status!=="not_required"&&r.status!=="rejected"&&<button disabled={busy} onClick={()=>void confirmPayment(r)}>Confirmar recebimento</button>}<button disabled={busy||r.status==="approved"||!!drawCategories.find(c=>c.id===r.category_id)?.registrations_closed||(r.payment_status!=="not_required"&&r.payment_status!=="paid")}
       onClick={()=>decide(r,"approved")}>Aprovar</button>
-      <button className="danger" disabled={busy||r.status==="rejected"} onClick={()=>decide(r,"rejected")}>Rejeitar</button></td>
+      <button className="danger" disabled={busy||r.status==="rejected"||(drawnCategory&&drawnCount>0&&r.category_id===drawCategoryId&&r.status==="approved")} onClick={()=>decide(r,"rejected")}>Rejeitar</button></td>
     </tr>)}</tbody></table></div>}
   </section>}
  </main>;
@@ -780,7 +787,7 @@ function ResultadosPublicos({categoryId,modality}:{categoryId:string;modality?:M
 
 function PublicTournament({session}:{session:Session|null}){
  const {slug}=useParams();const [params,setParams]=useSearchParams();
- type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string;best_of:number|null;registration_mode:"formed"|"drawn"};
+ type PublicCat={id:string;name:string;modality:Modality;fee_cents:number;capacity:number;status:string;best_of:number|null;registrations_closed:boolean;registration_mode:"formed"|"drawn"};
  const [t,setT]=useState<Tournament|null>(null);const [cats,setCats]=useState<PublicCat[]>([]);const [catId,setCatId]=useState("");
  const [err,setErr]=useState("");const [loading,setLoading]=useState(true);
  const [favorites,setFavorites]=useState(readFavorites);const [storageNotice,setStorageNotice]=useState("");
@@ -793,7 +800,7 @@ function PublicTournament({session}:{session:Session|null}){
    if(cancelled)return;
    if(error||!data){setErr("Este torneio não está disponível para consulta pública.");setLoading(false);return}
    const found=data as Tournament;
-   const result=await supabase.from("tournament_categories").select("id,name,modality,fee_cents,capacity,status,best_of,registration_mode").eq("tournament_id",found.id).order("created_at");
+   const result=await supabase.from("tournament_categories").select("id,name,modality,fee_cents,capacity,status,best_of,registration_mode,registrations_closed").eq("tournament_id",found.id).order("created_at");
    if(cancelled)return;
    if(result.error){setErr("Não foi possível carregar as categorias.");setLoading(false);return}
    setT(found);setCats((result.data||[]) as PublicCat[]);
@@ -808,19 +815,19 @@ function PublicTournament({session}:{session:Session|null}){
  function showTab(next:string,category?:string){const updated=new URLSearchParams(params);updated.set("aba",next);if(category){setCatId(category);updated.set("categoria",category)}setParams(updated)}
  if(loading)return <AppScaffold><p role="status">Carregando torneio...</p></AppScaffold>;
  if(!t)return <AppScaffold><div className="app-empty"><Trophy size={35}/><h1>Torneio indisponível</h1><p>{err}</p><Link className="button" to="/campeonatos">Explorar torneios</Link></div></AppScaffold>;
- const state=eventState(t);const canRegister=state.accepting&&(!cats.length||cats.some(c=>c.status==="open"));const saved=favorites.includes(t.id);
+ const state=eventState(t);const canRegister=state.accepting&&(!cats.length||cats.some(c=>c.status==="open"&&!c.registrations_closed));const saved=favorites.includes(t.id);
  const picker=<label className="category-picker">Categoria<select value={catId} onChange={e=>showTab(tab,e.target.value)}>{cats.map(c=><option key={c.id} value={c.id}>{c.name} — {modalities[c.modality]}</option>)}</select></label>;
  return <AppScaffold>
   <Link className="event-back" to="/campeonatos"><ArrowLeft size={17}/> Todos os torneios</Link>
   <div className="event-profile-cover"><div className="art-court"/><Volleyball size={135} strokeWidth={.8}/><span>O JOGO<br/><strong>COMEÇA AQUI.</strong></span></div>
-  <section className="event-profile-heading"><div><span className={`event-status ${canRegister?"open":""}`}>{canRegister&&<span className="live-dot"/>}{canRegister&&state.phase==="upcoming"?"Inscrições abertas":state.label}</span><h1>{t.name}</h1><div className="event-profile-meta"><span><CalendarDays size={16}/>{eventDates(t)}</span><span><MapPin size={16}/>{eventPlace(t)}</span></div></div><button className={`event-save ${saved?"saved":""}`} aria-pressed={saved} onClick={()=>{try{const next=saved?favorites.filter(id=>id!==t.id):[...favorites,t.id];writeFavorites(next);setFavorites(next);setStorageNotice("")}catch{setStorageNotice("Não foi possível salvar os favoritos neste navegador.")}}}><Heart size={18} fill={saved?"currentColor":"none"}/>{saved?"Salvo":"Salvar"}</button></section>
+  <section className="event-profile-heading"><div><span className={`event-status ${canRegister?"open":""}`}>{canRegister&&<span className="live-dot"/>}{state.phase==="upcoming"?(canRegister?"Inscrições abertas":"Inscrições encerradas"):state.label}</span><h1>{t.name}</h1><div className="event-profile-meta"><span><CalendarDays size={16}/>{eventDates(t)}</span><span><MapPin size={16}/>{eventPlace(t)}</span></div></div><button className={`event-save ${saved?"saved":""}`} aria-pressed={saved} onClick={()=>{try{const next=saved?favorites.filter(id=>id!==t.id):[...favorites,t.id];writeFavorites(next);setFavorites(next);setStorageNotice("")}catch{setStorageNotice("Não foi possível salvar os favoritos neste navegador.")}}}><Heart size={18} fill={saved?"currentColor":"none"}/>{saved?"Salvo":"Salvar"}</button></section>
   {storageNotice&&<p role="status" className="notice">{storageNotice}</p>}
   <nav className="event-tabs" aria-label="Seções do torneio">{[["informacoes","Informações"],["categorias","Categorias"],["regulamento","Regulamento"],["resultados","Jogos e resultados"]].map(([key,label])=><button key={key} aria-current={tab===key?"page":undefined} className={tab===key?"active":""} onClick={()=>showTab(key)}>{label}{key==="categorias"&&<span>{cats.length||1}</span>}</button>)}</nav>
   {tab==="informacoes"&&<div className="event-details-grid"><section className="card event-description"><h2>Sobre o torneio</h2><p className="written-description">{t.description||"Participe desta competição no VoloxPlay. Consulte as categorias disponíveis e leia o regulamento antes de fazer sua inscrição."}</p><div className="event-info-line"><CalendarDays size={20}/><div><strong>Quando</strong><p>{eventDates(t)}</p></div></div><div className="event-info-line"><MapPin size={20}/><div><strong>Onde</strong><p>{eventPlace(t)}</p></div></div><div className="event-info-line"><Clock size={20}/><div><strong>Prazo de inscrição</strong><p>{t.registration_deadline?`Até ${formatDate(t.registration_deadline)}, às 23h59 (Brasília)`:"Consulte a organização. Inscrições sujeitas à disponibilidade."}</p></div></div><button className="text-button" onClick={()=>showTab("regulamento")}>Ler regulamento completo <ChevronRight size={17}/></button></section><aside className="card event-entry-summary"><span className="app-eyebrow">SUA PRÓXIMA DISPUTA</span><h2>{canRegister?"Pronto para jogar?":"Acompanhe a competição"}</h2><p>{cats.length||1} categoria{(cats.length||1)===1?"":"s"} · Vôlei e Beach Tennis</p><p>Confira valores, modalidade e regulamento antes de se inscrever.</p><button disabled={!canRegister} onClick={()=>showTab("categorias")}>{canRegister?"Escolher categoria":"Inscrições encerradas"}<ChevronRight size={17}/></button><button className="text-button" onClick={()=>showTab("resultados")}>Ver jogos e resultados</button></aside></div>}
-  {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição individual, por dupla ou por equipe.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null}]).map(c=>{const available=state.accepting&&c.status==="open";return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {teamSizes[c.modality]} {teamSizes[c.modality]===1?"atleta":"atletas"} por equipe</p><p className="muted">Limite de {c.capacity} equipes · {c.best_of?formatLabel(c.modality,c.best_of):"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por equipe</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?"Inscrever minha equipe":"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
+  {tab==="categorias"&&<section><div className="section-heading"><h2>Escolha sua categoria</h2><p>Inscrição individual, por dupla ou por equipe.</p></div><div className="category-grid">{(cats.length?cats:[{id:"",name:t.category,modality:t.modality,fee_cents:t.fee_cents,capacity:t.capacity,status:"open",best_of:null,registrations_closed:false,registration_mode:"formed" as const}]).map(c=>{const available=state.accepting&&c.status==="open"&&!c.registrations_closed;return <article className="card category-card" key={c.id}><div className="category-icon"><Users size={24}/></div><span className={`event-status ${available?"open":""}`}>{available?"Inscrições abertas":"Inscrições encerradas"}</span><h3>{c.name}</h3><p>{modalities[c.modality]} · {c.registration_mode==="drawn"?"Inscrição individual · parceiros sorteados":teamSizes[c.modality]===1?"Inscrição individual":`${teamSizes[c.modality]} atletas por equipe`}</p><p className="muted">Limite de {c.capacity} {c.registration_mode==="drawn"?"atletas":"equipes"} · {c.best_of?formatLabel(c.modality,c.best_of):"Formato a confirmar"}</p><div className="category-price">{c.fee_cents?money(c.fee_cents):"Gratuita"}<small> por {c.registration_mode==="drawn"||teamSizes[c.modality]===1?"atleta":"equipe"}</small></div><button disabled={!available} onClick={()=>showTab("inscricao",c.id||undefined)}>{available?(c.registration_mode==="drawn"||teamSizes[c.modality]===1?"Inscrever-me":"Inscrever minha equipe"):"Inscrições encerradas"}<ChevronRight size={17}/></button></article>})}</div></section>}
   {tab==="regulamento"&&<div className="card">{cats.length>0&&picker}<CompetitionRules text={t.competition_rules||""} modality={modality} bestOf={selected?.best_of}/></div>}
-  {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}<ResultadosPublicos categoryId={catId} modality={modality}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
-  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><h2>{drawn?"Inscrição individual":"Inscreva sua equipe"}</h2><p>Vincule sua participação à sua conta de atleta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por {drawn?"atleta":"equipe"}</small></strong></div>{!state.accepting||selected&&selected.status!=="open"?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<AthleteTeamEntry key={`${t.id}-${catId}-${session?.user.id||"guest"}`} session={session} tournament={t} categoryId={cats.length?catId:null} categoryName={selected?.name||t.category} modality={modality!} fee={fee} drawn={drawn}/>}</section>}
+  {tab==="resultados"&&<div className="card"><h2>Jogos e resultados</h2>{cats.length>0?<>{picker}{drawn&&<DrawnTeamsPanel categoryId={catId}/>}<ResultadosPublicos categoryId={catId} modality={modality}/></>:<p className="muted">Os jogos serão exibidos quando a organização publicar os resultados da categoria.</p>}</div>}
+  {tab==="inscricao"&&<section className="card entry-form"><button className="text-button" onClick={()=>showTab("categorias")}><ArrowLeft size={15}/> Voltar para categorias</button><div className="section-heading"><h2>{drawn?"Inscrição individual":"Inscreva sua equipe"}</h2><p>Vincule sua participação à sua conta de atleta.</p></div>{cats.length>0&&picker}<div className="entry-selected"><span>{selected?.name||t.category} · {modality?modalities[modality]:""}</span><strong>{fee?money(fee):"Gratuita"}<small> por {registrationUnit(modality!,selected?.registration_mode)}</small></strong></div>{!state.accepting||selected&&(selected.status!=="open"||selected.registrations_closed)?<p className="notice">As inscrições desta categoria estão encerradas.</p>:<AthleteTeamEntry key={`${t.id}-${catId}-${session?.user.id||"guest"}`} session={session} tournament={t} categoryId={cats.length?catId:null} categoryName={selected?.name||t.category} modality={modality!} fee={fee} drawn={drawn}/>}</section>}
  </AppScaffold>;
 }
 function RegistrationStatus(){

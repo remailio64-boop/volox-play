@@ -40,3 +40,7 @@ assert.equal(athleteReturn('/t/copa?aba=inscricao'),'/t/copa?aba=inscricao');
 assert.equal(athleteReturn('/atleta?retorno=inscricao'),'/atleta?retorno=inscricao');
 assert.equal(normalizeAthleteCode(' A1b2C3d4E5f6 '),'a1b2c3d4e5f6');
 console.log('9 athlete identity and safe return checks passed');
+
+const {registrationUnit}=await load('../src/lib/registration.ts');
+for(const [modality,mode,expected] of [['areia_2x2','formed','equipe'],['areia_4x4','drawn','atleta'],['beach_tennis_simples','formed','atleta'],['beach_tennis_duplas','formed','equipe'],['beach_tennis_duplas','drawn','atleta'],['quadra_6x6','formed','equipe']])assert.equal(registrationUnit(modality,mode),expected);
+console.log('6 registration price-unit checks passed');
